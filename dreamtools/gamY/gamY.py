@@ -141,10 +141,9 @@ from timeit import default_timer as timer
 import itertools # Useful in FOR loops in MAKRO
 
 # gamY data objects
-from classes import Variable, Equation, Function, MockMatch, Group, Block, CaseInsensitiveDict
-
+from ..gamY.classes import Variable, Equation, Function, MockMatch, Group, Block, CaseInsensitiveDict
 #  The regex patterns used to match commands
-from patterns import PATTERNS
+from ..gamY.patterns import PATTERNS
 
 
 class Precompiler:

@@ -1,3 +1,4 @@
+from .gamY import gamY
 from .gams_pandas import Gdx, GamsPandasDatabase
 from .gams_pandas import series_from_parameter, series_from_set, series_from_variable, index_names_from_symbol, index_from_symbol
 from .gams_pandas import set_symbol_records, merge_symbol_records
