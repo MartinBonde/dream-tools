@@ -1,10 +1,18 @@
-from .gamY import gamY
+from warnings import warn
+
 from .gams_pandas import Gdx, GamsPandasDatabase
 from .gams_pandas import series_from_parameter, series_from_set, series_from_variable, index_names_from_symbol, index_from_symbol
 from .gams_pandas import set_symbol_records, merge_symbol_records
+
 import pandas as pd
-import plotly.graph_objects as go
-import plotly.io as pio
+
+try:
+  import plotly.graph_objects as go
+  import plotly.io as pio
+  PLOTLY = True
+except ImportError:
+  warn("Install the plotly package to enable plotting with dream-tools.")
+  PLOTLY = False
 from math import inf
 
 # Global setting controlling the default position of the time index (-1 = last index is time)
@@ -87,7 +95,8 @@ def _series_plot(self, start=None, end=None, title=None, **kwargs):
   if title is None:
     title = self.name
   plot(self, start=start, end=end, title=title, **kwargs)
-pd.Series.plot = _series_plot
+if PLOTLY:
+  pd.Series.plot = _series_plot
 
 
 def _data_frame_plot(self, start=None, end=None, title=None, renderer=None, file=None):
@@ -99,7 +108,8 @@ def _data_frame_plot(self, start=None, end=None, title=None, renderer=None, file
     fig.show(renderer=renderer)
   else:
     fig.write_image(file)
-pd.DataFrame.plot = _data_frame_plot
+if PLOTLY:
+  pd.DataFrame.plot = _data_frame_plot
 
 
 def set_renderer(renderer="browser"):

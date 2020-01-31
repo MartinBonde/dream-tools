@@ -1,6 +1,8 @@
 """
 """
 import os
+from collections.abc import Mapping
+
 import numpy as np
 import pandas as pd
 import gams
@@ -11,12 +13,42 @@ from copy import deepcopy
 logger = logging.getLogger(__name__)
 
 
+class GamsPandasSet(Mapping):
+  """
+  Pandas representation of a GAMS set.
+  A set is treated as a Pandas Series with the explantory text as value, except when iterated over.
+  When iterated over the series index is returned, such that a GamsPandasSets can be used as an index directly.
+  """
+  def __init__(self, texts=None, index=None, name=None):
+    self._data = pd.Series(texts, index, name=name).sort_index()
+
+  def __getattr__(self, item):
+    return self._data.__getattr__(item)
+
+  def __getitem__(self, k):
+    return self._data.__getitem__(k)
+
+  def __setitem__(self, key, value):
+    self._data.__setitem__(key, value)
+
+  def __iter__(self):
+    return self._data.index.__iter__()
+
+  def __len__(self):
+    return len(self._data)
+
+  def __repr__(self):
+    return self._data.__repr__()
+
+
+
 class GamsPandasDatabase:
   """
   GamsPandasDatabase converts sets, parameters, and variables between a GAMS database and Pandas series.
   When as symbol is first retrieved it is converted to a Pandas series and stored in self.series
   Changes to retrieved series are written to the GAMS database on export.
   """
+
   def __init__(self, database=None, workspace=None):
     if database is None:
       if workspace is None:
@@ -104,22 +136,29 @@ class GamsPandasDatabase:
     """Add set symbol to database based on a Pandas series."""
     if not isinstance(series.values[0], str):
       raise TypeError("To convert a Pandas series to a GAMS set, the series must contain strings (element texts).")
-    self.database.add_set(series.name, len(series.index.names), explanatory_text)
+    domains = ["*" if i is None else i for i in series.index.names]
+    if domains == [series.name]:
+      domains = ["*"]
+    self.database.add_set_dc(series.name, domains, explanatory_text)
     if isinstance(series.index, pd.RangeIndex):
       series = series.copy()
       series.index = series.index.astype(str)
-    self[series.name] = series
+    self[series.name] = GamsPandasSet(series, series.index, name=series.name)
 
   def add_set_from_index(self, index, explanatory_text=""):
     """Add set symbol to database based on a Pandas index."""
-    self.database.add_set(index.name, len(index.names), explanatory_text)
-    self[index.name] = pd.Series([str(i) for i in index], index=index, name=index.name)
+    domains = ["*" if i is None else i for i in index.names]
+    if domains == [index.name]:
+      domains = ["*"]
+    self.database.add_set_dc(index.name, domains, explanatory_text)
+    self[index.name] = GamsPandasSet([str(i) for i in index], index=index, name=index.name)
 
   def add_parameter_from_series(self, series, explanatory_text="", add_missing_domains=False):
     """Add parameter symbol to database based on a Pandas series."""
     self.add_parameter_from_dataframe(series.name, series.reset_index(), explanatory_text, add_missing_domains)
 
-  def add_parameter_from_dataframe(self, identifier, df, explanatory_text="", add_missing_domains=False, value_column_index=-1):
+  def add_parameter_from_dataframe(self, identifier, df, explanatory_text="", add_missing_domains=False,
+                                   value_column_index=-1):
     """Add parameter symbol to database based on a Pandas DataFrame."""
     domains = df.columns[:value_column_index:]
     for d in domains:
@@ -127,7 +166,8 @@ class GamsPandasDatabase:
         if add_missing_domains:
           self.add_set_from_series(df[d])
         else:
-          raise KeyError(f"'{d}' is not a set in the database. Enable add_missing_domains or add the set to the database manually.")
+          raise KeyError(
+            f"'{d}' is not a set in the database. Enable add_missing_domains or add the set to the database manually.")
     self.add_parameter_dc(identifier, domains, explanatory_text)
     self[identifier] = df.set_index(list(domains)).iloc[:, 0]
 
@@ -148,8 +188,8 @@ class GamsPandasDatabase:
     if item not in self.series:
       symbol = self.symbols[item]
       if isinstance(symbol, gams.GamsSet):
-        self.series[item] = list_from_set(symbol)
-        # self.series[item] = series_from_set(symbol)
+        # self.series[item] = list_from_set(symbol)
+        self.series[item] = series_from_set(symbol)
       elif isinstance(symbol, gams.GamsVariable):
         self.series[item] = series_from_variable(symbol)
       elif isinstance(symbol, gams.GamsParameter):
@@ -159,11 +199,16 @@ class GamsPandasDatabase:
     return self.series[item]
 
   def __setitem__(self, key, value):
-    try:
-      set_symbol_records(value, self.symbols[key])
+    if key in self.symbols:
+      try:
+        set_symbol_records(value, self.symbols[key])
+        self.series[key] = value
+      except AttributeError:
+        self.series[key] = pd.Series(value, index=self.series[key].index)
+    else:
+      if not value.name:
+        value.name = key
       self.series[key] = value
-    except AttributeError:
-      self.series[key] = pd.Series(value, index=self.series[key].index)
 
   def items(self):
     return self.symbols.items()
@@ -209,15 +254,16 @@ def merge_symbol_records(series, symbol):
 
 def set_symbol_records(series, symbol):
   """Convert Pandas series to records in a GAMS Symbol"""
-  if isinstance(symbol, gams.GamsSet):
-    attr = "text"
-  elif isinstance(symbol, gams.GamsVariable):
-    attr = "level"
-  elif isinstance(symbol, gams.GamsParameter):
-    attr = "value"
   symbol.clear()
-  for k, v in series.items():
-    setattr(symbol.add_record(k), attr, v)
+  if isinstance(symbol, gams.GamsSet):
+    for k, v in series.items():
+      symbol.add_record(k).text = v
+  elif isinstance(symbol, gams.GamsVariable):
+    for k, v in series.items():
+      symbol.add_record(k).level = v
+  elif isinstance(symbol, gams.GamsParameter):
+    for k, v in series.items():
+      symbol.add_record(k).value = v
 
 
 def index_names_from_symbol(symbol):
@@ -240,6 +286,7 @@ def index_from_symbol(symbol):
   else:
     return None
 
+
 def series_from_variable(symbol, attr="level"):
   """Get a variable symbol from the GAMS database and return an equivalent Pandas series."""
   s = pd.Series([getattr(rec, attr) for rec in symbol], index_from_symbol(symbol), name=symbol.name)
@@ -254,8 +301,7 @@ def series_from_parameter(symbol):
 
 def series_from_set(symbol):
   """Get a set symbol from the GAMS database and return an equivalent Pandas series."""
-  s = pd.Series([rec.text for rec in symbol], index_from_symbol(symbol), name=symbol.name)
-  return s.sort_index()
+  return GamsPandasSet(texts=[rec.text for rec in symbol], index=index_from_symbol(symbol), name=symbol.name)
 
 
 def list_from_set(symbol):
@@ -265,6 +311,7 @@ def list_from_set(symbol):
 
 class Gdx(GamsPandasDatabase):
   """Wrapper that opens a GDX file as a GamsPandasDatabase."""
+
   def __init__(self, file_path, workspace=None):
     self.abs_path = os.path.abspath(file_path)
     logger.info(f"Open GDX file from {self.abs_path}.")
@@ -297,7 +344,8 @@ def approximately_equal(x, y, ndigits=0):
 
 def test_gdx_read():
   assert approximately_equal(Gdx("test.gdx")["qY"]["byg", "2010"], 191)
-  assert approximately_equal(Gdx("test.gdx")["qI_s"]["IB", "fre", "2010"], 4.43)  # "IB" should be changed to "iB" in the GDX file.
+  assert approximately_equal(Gdx("test.gdx")["qI_s"]["IB", "fre", "2010"],
+                             4.43)  # "IB" should be changed to "iB" in the GDX file.
   assert approximately_equal(Gdx("test.gdx")["eCx"], 1)
 
 
@@ -325,30 +373,44 @@ def test_add_set_from_index():
   t = pd.Index([str(i) for i in range(2010, 2026)], name="t")
   db.add_set_from_index(t)
   assert db["t"].name == "t"
-  assert all(db["t"].index == t)
+  assert all(db["t"][:] == t)
+  assert db.symbols["t"].domains == ["*"]
 
   s = pd.Index(["services", "goods"], name="s")
-  st = pd.MultiIndex.from_product([s,t], names=["s", "t"])
+  st = pd.MultiIndex.from_product([s, t], names=["s", "t"]).sort_values()
   st.name = "st"
   db.add_set_from_index(st)
-  assert db["t"].name == "t"
-  assert all(db["t"].index == t)
+  assert db["st"].name == "st"
+  assert all(db["st"].index == st[:])
+  assert db.symbols["st"].domains == ["s", "t"]
 
 
 def test_add_set_from_series():
   db = GamsPandasDatabase()
   t = pd.Index([str(i) for i in range(2010, 2026)], name="t")
-  t = pd.Series(t, index=t, name="t")
+  t = pd.Series([f"Year {i}" for i in t], index=t, name="t")
   db.add_set_from_series(t)
   assert db["t"].name == "t"
-  assert all(db["t"] == t)
+  assert all(db["t"][:] == t)
+  assert all(db["t"].index == t.index)
+  assert db.symbols["t"].domains == ["*"]
+
+  tsub = t[5:]
+  tsub.name = "tsub"
+  db.add_set_from_series(tsub)
+  assert db["tsub"].name == "tsub"
+  assert all(db["tsub"][:] == tsub)
+  assert all(db["tsub"].index == tsub.index)
+  assert db.symbols["tsub"].domains == ["t"]
 
   s = pd.Index(["services", "goods"], name="s")
-  st = pd.MultiIndex.from_product([s,t], names=["s", "t"])
+  st = pd.MultiIndex.from_product([s, t], names=["s", "t"]).sort_values()
   st = pd.Series([str(i) for i in st], index=st, name="st")
   db.add_set_from_series(st)
   assert db["st"].name == "st"
-  assert all(db["st"] == st)
+  assert all(db["st"][:] == st)
+  assert all(db["st"].index == st.index)
+  assert db.symbols["st"].domains == ["s", "t"]
 
 
 def test_add_parameter_from_dataframe():
@@ -364,17 +426,17 @@ def test_add_parameter_from_dataframe():
 def test_multiply_added():
   db = GamsPandasDatabase()
   df = pd.DataFrame([
-      ["2010", "ser", 3],
-      ["2010", "goo", 2],
-      ["2020", "ser", 6],
-      ["2020", "goo", 4],
-    ], columns=["t", "s", "value"])
+    ["2010", "ser", 3],
+    ["2010", "goo", 2],
+    ["2020", "ser", 6],
+    ["2020", "goo", 4],
+  ], columns=["t", "s", "value"])
   db.add_parameter_from_dataframe("q", df, add_missing_domains=True)
 
   df = pd.DataFrame([
-      ["2010", 1],
-      ["2020", 1.2],
-    ], columns=["t", "value"])
+    ["2010", 1],
+    ["2020", 1.2],
+  ], columns=["t", "value"])
   db.add_parameter_from_dataframe("p", df, add_missing_domains=True)
 
   v = db["p"] * db["q"]

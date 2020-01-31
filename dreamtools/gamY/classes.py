@@ -1,7 +1,7 @@
-import collections
+from collections.abc import MutableMapping
 
 
-class CaseInsensitiveDict(collections.MutableMapping):
+class CaseInsensitiveDict(MutableMapping):
     """A case-insensitive ``dict``-like object.
     Implements all methods and operations of
     ``collections.MutableMapping`` as well as dict's ``copy``. Also
