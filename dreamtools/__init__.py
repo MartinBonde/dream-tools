@@ -6,6 +6,8 @@ from .gams_pandas import set_symbol_records, merge_symbol_records
 
 import pandas as pd
 
+from .pandas_util import unstack_multiseries, merge_multiseries
+
 try:
   import plotly.graph_objects as go
   import plotly.io as pio
@@ -32,29 +34,6 @@ def time(start, end=None):
   END_YEAR = end
 
 
-def unstack_multiseries(series):
-  if isinstance(series.index, pd.MultiIndex):
-    df = series.copy()
-    if series.name is None:
-      series.name = ""
-    df.index = pd.MultiIndex.from_tuples((f"{series.name}[{','.join(i[:X_AXIS_INDEX:])}]", i[X_AXIS_INDEX]) for i in df.index)
-    df = df.unstack(0)
-  else:
-    df = pd.DataFrame(series)
-  df.index = pd.to_numeric(df.index)
-  df.index.name = "t"
-  return df
-
-
-def merge_multiseries(*series):
-  output = pd.DataFrame()
-  for s in series:
-    df = unstack_multiseries(s)
-    for c in df.columns:
-      output[c] = df[c]
-  return output
-
-
 def add_trace_pr_column(fig, df, start=None, end=None, go_type=go.Scatter):
   if start is None:
     start = START_YEAR
@@ -70,7 +49,7 @@ def multiseries_figure(*series, title=None, start=None, end=None):
   fig = go.Figure()
   if title:
     fig.layout = go.Layout(title=go.layout.Title(text=title, xanchor='center'))
-  add_trace_pr_column(fig, merge_multiseries(*series), start, end)
+  add_trace_pr_column(fig, merge_multiseries(*series, X_AXIS_INDEX), start, end)
   return fig
 
 
