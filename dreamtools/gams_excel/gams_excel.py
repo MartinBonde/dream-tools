@@ -25,7 +25,7 @@ def set_gdx_path(path):
 
 @xw.func
 def get_gdx_path():
-  """Get file path currently active GDX file."""
+  """Get file path of currently active GDX file."""
   return ACTIVE_GDX_PATH
 
 
@@ -35,6 +35,12 @@ def get_gdx_path():
 @xw.func
 @xw.ret(header=True, index=True, expand='table')
 def gdx(request, year=None, gdx_path=None):
+  """
+  Look up the request in a gdx file.
+  A request uses Gekko syntax, e.g. "qBNP", "qY[tje]", or "qY[#s]".
+  If no year is specified, an array is returned with values for all available years.
+  If no gdx_path is specified, use the global path set using set_gdx_path
+  """
   if gdx_path is None:
     if ACTIVE_GDX_PATH is None:
       return "#ERROR! Use set_gdx_path to choose a gdx file."
