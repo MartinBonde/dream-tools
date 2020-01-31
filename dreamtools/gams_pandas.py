@@ -23,7 +23,7 @@ class GamsPandasSet(Mapping):
     self._data = pd.Series(texts, index, name=name).sort_index()
 
   def __getattr__(self, item):
-    return self._data.__getattr__(item)
+    return getattr(self._data, item)
 
   def __getitem__(self, k):
     return self._data.__getitem__(k)
@@ -39,7 +39,6 @@ class GamsPandasSet(Mapping):
 
   def __repr__(self):
     return self._data.__repr__()
-
 
 
 class GamsPandasDatabase:
@@ -134,7 +133,7 @@ class GamsPandasDatabase:
 
   def add_set_from_series(self, series, explanatory_text=""):
     """Add set symbol to database based on a Pandas series."""
-    if not isinstance(series.values[0], str):
+    if not isinstance(series.array[0], str):
       raise TypeError("To convert a Pandas series to a GAMS set, the series must contain strings (element texts).")
     domains = ["*" if i is None else i for i in series.index.names]
     if domains == [series.name]:
@@ -467,14 +466,30 @@ def test_export_with_no_changes():
   assert round(os.stat("test.gdx").st_size, -5) == round(os.stat("test_export.gdx").st_size, -5)
 
 
-def test_export_with_changes():
+def test_export_variable_with_changes():
   gdx = Gdx("test.gdx")
   gdx["qY"] = gdx["qY"] * 2
   gdx.export("test_export.gdx", relative_path=True)
 
   old, new = Gdx("test.gdx"), Gdx("test_export.gdx")
   for i in old["qY"].index:
-    approximately_equal(old["qY"][i] * 2, new["qY"][i])
+    assert approximately_equal(old["qY"][i] * 2, new["qY"][i])
+
+
+def test_export_set_with_changes():
+  gdx = Gdx("test.gdx")
+  gdx["s"]["tje"] = "New text"
+  gdx.export("test_export.gdx", relative_path=True)
+  assert Gdx("test_export.gdx")["s"]["tje"] == "New text"
+
+
+def test_copy_set():
+  gdx = Gdx("test.gdx")
+  gdx["alias"] = gdx["s"]
+  gdx["alias"].name = "alias"
+  gdx.add_set_from_series(gdx["alias"])
+  gdx.export("test_export.gdx", relative_path=True)
+  assert Gdx("test_export.gdx")["alias"] == gdx["s"]
 
 
 def test_export_added_variable():
