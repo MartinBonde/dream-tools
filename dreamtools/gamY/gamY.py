@@ -132,6 +132,7 @@ import sys
 import os
 import shutil
 import subprocess
+import signal
 import pickle
 import re
 from math import ceil, floor
@@ -1351,11 +1352,16 @@ def cmd_call():
     "pageWidth=9999",
   ]
   call_parameters += [arg for arg in args[2:] if (arg[:5] != "gams=")]
+
   process = subprocess.Popen(
     [gams_path, new_file, *call_parameters],
     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
     universal_newlines=True, shell=True
   )
+
+  def signal_handler(sig, frame):
+    process.send_signal(sig)
+  signal.signal(signal.SIGINT, signal_handler)
 
   while process.poll() is None:
     for line in iter(process.stdout.readline, ""):
