@@ -5,7 +5,7 @@ import dreamtools as dt
 gdx = dt.Gdx("test.gdx")
 
 # Hent sets fra gdx
-s, i = gdx.get("s", "i")
+s, i, t = gdx.get("s", "i", "t")
 
 # Hent variable fra gdx
 qY, qBNP, qI_s = gdx.get("qY", "qBNP", "qI_s")
@@ -58,10 +58,12 @@ qBNP.plot(file="images/plot.svg")
 import plotly.io as pio
 pio.renderers.default = "browser"
 
-DB = {"a": 1, "b": 2}
-def getter(name):
-  return DB[name]
-def setter(name, value):
-  DB[name] = value
 
-
+# Tilføj set fra scratch til tom GamsPandasDatabase
+db = GamsPandasDatabase()
+Par, Var, Set = db.create_parameter, db.create_variable, db.create_set
+t = Set("t", range(2000, 2020), "Årstal")
+s = Set("s", ["tjenester", "fremstilling"], "Brancher")
+gq = Par("gq", None, "Produktivitets-vækst", 0.01)
+y = Var("y", [s,t], "Produktion")
+y.loc[s,t] = [(1 + 0.01)**(i-2010) for i in t]
