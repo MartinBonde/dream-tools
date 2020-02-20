@@ -59,3 +59,28 @@ import plotly.io as pio
 pio.renderers.default = "browser"
 
 
+# Lav ny GamsPandasDatabase og alias af metoder til at lave nye symboler
+db = dt.GamsPandasDatabase()
+Par, Var, Set = db.create_parameter, db.create_variable, db.create_set
+
+# Definer sets
+t = Set("t", range(2000, 2020), "Årstal")
+s = Set("s", ["tjenester", "fremstilling"], "Brancher")
+st = Set("st", [s, t], "Branche x år dummy")
+
+# Definer nye parametre og variable, gerne ud fra sets
+gq = Par("gq", None, "Produktivitets-vækst", 0.01)
+fq = Par("fp", t, "Vækstkorrektionsfaktor", (1 + 0.01) ** (t - 2010))
+d = Par("d", st, "Dummy")
+y = Var("y", [s, t], "Produktion")
+p = Var("p", [s, t], "Pris")
+
+# Assignment
+y["tjenester"], y["fremstilling"] = 7, 3
+p = 100  # Hov, vi kom til at overskrive vores p parameter!
+p = db["p"]  # Den kan heldigivs findes igen
+p[:] = 100
+
+# Beregner med symboler som deler sets sker uden problemer
+y *= fq
+print(p * y)

@@ -616,7 +616,7 @@ def test_detuple():
   assert list(GamsPandasDatabase.detuple([1, 2])) == [1, 2]
 
 
-def test_create_set():
+def test_create_methods():
   # Create empty GamsPandasDatabase and alias creation methods
   db = GamsPandasDatabase()
   Par, Var, Set = db.create_parameter, db.create_variable, db.create_set
@@ -626,11 +626,8 @@ def test_create_set():
   s = Set("s", ["tjenester", "fremstilling"], "Brancher")
   st = Set("st", [s, t], "Branche x år dummy")
 
-  # Create parameters and variables base on zero ore more sets
+  # Create parameters and variables based on zero ore more sets
   gq = Par("gq", None, "Produktivitets-vækst", 0.01)
   fq = Par("fp", t, "Vækstkorrektionsfaktor", (1 + 0.01)**(t-2010))
   d = Par("d", st, "Dummy")
   y = Var("y", [s,t], "Produktion")
-
-  # Assignment
-  y["tjenester"], y["fremstilling"] = 7 * fq, 3 * fq
