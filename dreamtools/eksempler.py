@@ -59,11 +59,3 @@ import plotly.io as pio
 pio.renderers.default = "browser"
 
 
-# Tilføj set fra scratch til tom GamsPandasDatabase
-db = GamsPandasDatabase()
-Par, Var, Set = db.create_parameter, db.create_variable, db.create_set
-t = Set("t", range(2000, 2020), "Årstal")
-s = Set("s", ["tjenester", "fremstilling"], "Brancher")
-gq = Par("gq", None, "Produktivitets-vækst", 0.01)
-y = Var("y", [s,t], "Produktion")
-y.loc[s,t] = [(1 + 0.01)**(i-2010) for i in t]

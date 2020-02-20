@@ -14,6 +14,26 @@ from copy import deepcopy
 
 logger = logging.getLogger(__name__)
 
+def is_iterable(arg):
+  return isinstance(arg, Iterable) and not isinstance(arg, string_types)
+
+def map_lowest_level(x, func):
+  """Map lowest level of zero or more nested lists."""
+  if is_iterable(x):
+    return [map_lowest_level(i, func) for i in x]
+  else:
+    return func(x)
+
+def try_to_int(x):
+  try:
+    return int(x)
+  except ValueError:
+    return x
+
+def map_to_int_where_possible(iter):
+  """Returns an iterable where each element is converted to an integer if possible for that element."""
+  return map_lowest_level(iter, try_to_int)
+
 
 class GamsPandasDatabase:
   """
@@ -145,31 +165,64 @@ class GamsPandasDatabase:
     else:
       df = series.reset_index()
     self.add_variable_from_dataframe(series.name, df, explanatory_text, add_missing_domains)
-  #
-  # def create_set(self, name=None, index=None, explanatory_text="", texts=None):
-  #   series = GamsPandasSet(index, texts, name)
-  #   series.explanatory_text = explanatory_text
-  #   self.add_set_from_series(series, explanatory_text)
-  #   return self[name]
 
-  def create_variable(self, name=None, index=None, explanatory_text="", data=None, dtype=None, copy=False, add_missing_domains=False):
+  def create_set(self, name, index, explanatory_text="", texts=None):
     if index and is_iterable(index[0]):
       multi_index = pd.MultiIndex.from_product(index)
-      multi_index.names = [i.name for i in index]
+      multi_index.names = [getattr(i, "name", None) for i in index]
       index = multi_index
-    series = pd.Series(data, index, dtype, name, copy)
-    series.explanatory_text = explanatory_text
-    self.add_variable_from_series(series, explanatory_text, add_missing_domains)
+    else:
+      index = pd.Index(index)
+    index.name = name
+    index.explanatory_text = explanatory_text
+    index.texts = texts
+    self.add_set_from_index(index, explanatory_text)
     return self[name]
 
-  def create_parameter(self, name=None, index=None, explanatory_text="", data=None, dtype=None, copy=False, add_missing_domains=False):
-    if index and is_iterable(index[0]):
-      multi_index = pd.MultiIndex.from_product(index)
-      multi_index.names = [i.name for i in index]
-      index = multi_index
-    series = pd.Series(data, index, dtype, name, copy)
-    series.explanatory_text = explanatory_text
-    self.add_parameter_from_series(series, explanatory_text, add_missing_domains)
+  def create_variable(self, name, index=None, explanatory_text="", data=None, dtype=None, copy=False, add_missing_domains=False):
+    if index is not None:
+      if not isinstance(index, pd.Index) and len(index) and is_iterable(index[0]):
+        multi_index = pd.MultiIndex.from_product(index)
+        multi_index.names = [i.name for i in index]
+        index = multi_index
+      series = pd.Series(data, index, dtype, name, copy)
+      series.explanatory_text = explanatory_text
+      self.add_variable_from_series(series, explanatory_text, add_missing_domains)
+    elif isinstance(data, pd.DataFrame):
+      self.add_variable_from_dataframe(name, data, explanatory_text, add_missing_domains)
+    elif isinstance(data, pd.Series):
+      self.add_variable_from_series(data, explanatory_text, add_missing_domains)
+    else:
+      if is_iterable(data) and len(data) and is_iterable(data[0]):
+        self.add_variable(name, len(data[0]), explanatory_text)
+      elif is_iterable(data):
+        self.add_variable(name, 1, explanatory_text)
+      else:
+        self.add_variable(name, 0, explanatory_text)
+      self[name] = data
+    return self[name]
+
+  def create_parameter(self, name, index=None, explanatory_text="", data=None, dtype=None, copy=False, add_missing_domains=False):
+    if index is not None:
+      if not isinstance(index, pd.Index) and len(index) and is_iterable(index[0]):
+        multi_index = pd.MultiIndex.from_product(index)
+        multi_index.names = [i.name for i in index]
+        index = multi_index
+      series = pd.Series(data, index, dtype, name, copy)
+      series.explanatory_text = explanatory_text
+      self.add_parameter_from_series(series, explanatory_text, add_missing_domains)
+    elif isinstance(data, pd.DataFrame):
+      self.add_parameter_from_dataframe(name, data, explanatory_text, add_missing_domains)
+    elif isinstance(data, pd.Series):
+      self.add_parameter_from_series(data, explanatory_text, add_missing_domains)
+    else:
+      if is_iterable(data) and len(data) and is_iterable(data[0]):
+        self.add_parameter(name, len(data[0]), explanatory_text)
+      elif is_iterable(data):
+        self.add_parameter(name, 1, explanatory_text)
+      else:
+        self.add_parameter(name, 0, explanatory_text)
+      self[name] = data
     return self[name]
 
   def add_variable_from_dataframe(self, identifier, df, explanatory_text="", add_missing_domains=False, value_column_index=-1):
@@ -203,29 +256,29 @@ class GamsPandasDatabase:
       if isinstance(symbol, gams.GamsSet):
         self.series[item] = index_from_symbol(symbol)
       elif isinstance(symbol, gams.GamsVariable):
-        if is_scalar(symbol):
-          self.series[item] = symbol.find_record().level
+        if symbol_is_scalar(symbol):
+          self.series[item] = symbol.find_record().level if len(symbol) else None
         else:
           self.series[item] = series_from_variable(symbol)
       elif isinstance(symbol, gams.GamsParameter):
-        if is_scalar(symbol):
-          self.series[item] = symbol.find_record().value
+        if symbol_is_scalar(symbol):
+          self.series[item] = symbol.find_record().value if len(symbol) else None
         else:
           self.series[item] = series_from_parameter(symbol)
       elif isinstance(symbol, gams.GamsEquation):
         return symbol
     return self.series[item]
 
-  def __setitem__(self, key, value):
-    if key in self.symbols:
-      if not is_iterable(value) and is_iterable(self[key]):  # If assigning a scalar to all records in a series
-        value = pd.Series(value, index=self[key].index)
-      set_symbol_records(value, self.symbols[key])
-      self.series[key] = value
+  def __setitem__(self, name, value):
+    if name in self.symbols:
+      if not is_iterable(value) and is_iterable(self[name]):  # If assigning a scalar to all records in a series
+        value = pd.Series(value, index=self[name].index)
+      set_symbol_records(self.symbols[name], value)
+      self.series[name] = value
     else:
       if not value.name:
-        value.name = key
-      self.series[key] = value
+        value.name = name
+      self.series[name] = value
 
   def items(self):
     return self.symbols.items()
@@ -239,7 +292,7 @@ class GamsPandasDatabase:
   def save_series_to_database(self):
     """Save Pandas series to GAMS database"""
     for symbol_name, series in self.series.items():
-      set_symbol_records(series, self.symbols[symbol_name])
+      set_symbol_records(self.symbols[symbol_name], series)
 
   def export(self, path):
     """Save changes to database and export database to GDX file."""
@@ -269,34 +322,12 @@ def merge_symbol_records(series, symbol):
     setattr(symbol.merge_record(k), attr, v)
 
 
-def is_iterable(arg):
-  return isinstance(arg, Iterable) and not isinstance(arg, string_types)
-
-
-def map_lowest_level(x, func):
-  """Map lowest level of zero or more nested lists."""
-  if is_iterable(x):
-    return [map_lowest_level(i, func) for i in x]
-  else:
-    return func(x)
-
-
-def try_to_int(x):
-  try:
-    return int(x)
-  except ValueError:
-    return x
-
-def map_to_int_where_possible(iter):
-  """Returns an iterable where each element is converted to an integer if possible for that element."""
-  return map_lowest_level(iter, try_to_int)
-
-
-def set_symbol_records(series, symbol):
+def set_symbol_records(symbol, value):
   """Convert Pandas series to records in a GAMS Symbol"""
   if isinstance(symbol, gams.GamsSet):
-    if isinstance(series, pd.Index):
-      series = getattr(series, "texts", pd.Series(map(str, series), index=series))
+    if isinstance(value, pd.Index):
+      texts = getattr(value, "texts", None)
+      value = texts if texts is not None else pd.Series(map(str, value), index=value)
     def add_record(symbol, k, v):
       symbol.add_record(k).text = str(v)
   elif isinstance(symbol, gams.GamsVariable):
@@ -309,12 +340,12 @@ def set_symbol_records(series, symbol):
     TypeError(f"{type(symbol)} is not (yet) supported by gams_pandas")
 
   symbol.clear()
-  if is_scalar(symbol):
-    add_record(symbol, None, series)
-  elif list(series.keys()) == [0]:  # If singleton series
-    add_record(symbol, None, series[0])
+  if symbol_is_scalar(symbol):
+    add_record(symbol, None, value)
+  elif list(value.keys()) == [0]:  # If singleton series
+    add_record(symbol, None, value[0])
   else:
-    for k, v in series.items():
+    for k, v in value.items():
       add_record(symbol, map_lowest_level(k, str), v)
 
 
@@ -344,7 +375,7 @@ def index_from_symbol(symbol):
   return index
 
 
-def is_scalar(symbol):
+def symbol_is_scalar(symbol):
   return not symbol.domains
 
 
@@ -584,3 +615,22 @@ def test_detuple():
   assert GamsPandasDatabase.detuple(1) == 1
   assert list(GamsPandasDatabase.detuple([1, 2])) == [1, 2]
 
+
+def test_create_set():
+  # Create empty GamsPandasDatabase and alias creation methods
+  db = GamsPandasDatabase()
+  Par, Var, Set = db.create_parameter, db.create_variable, db.create_set
+
+  # Create sets from scratch
+  t = Set("t", range(2000, 2020), "Årstal")
+  s = Set("s", ["tjenester", "fremstilling"], "Brancher")
+  st = Set("st", [s, t], "Branche x år dummy")
+
+  # Create parameters and variables base on zero ore more sets
+  gq = Par("gq", None, "Produktivitets-vækst", 0.01)
+  fq = Par("fp", t, "Vækstkorrektionsfaktor", (1 + 0.01)**(t-2010))
+  d = Par("d", st, "Dummy")
+  y = Var("y", [s,t], "Produktion")
+
+  # Assignment
+  y["tjenester"], y["fremstilling"] = 7 * fq, 3 * fq
