@@ -67,6 +67,7 @@ Par, Var, Set = db.create_parameter, db.create_variable, db.create_set
 t = Set("t", range(2000, 2020), "Årstal")
 s = Set("s", ["tjenester", "fremstilling"], "Brancher")
 st = Set("st", [s, t], "Branche x år dummy")
+sub = Set("sub", s, "Subset af brancher")
 
 # Definer nye parametre og variable, gerne ud fra sets
 gq = Par("gq", None, "Produktivitets-vækst", 0.01)

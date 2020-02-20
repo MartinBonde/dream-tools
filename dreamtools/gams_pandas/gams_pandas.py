@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 def is_iterable(arg):
   return isinstance(arg, Iterable) and not isinstance(arg, string_types)
 
-def map_lowest_level(x, func):
+def map_lowest_level(func, x):
   """Map lowest level of zero or more nested lists."""
   if is_iterable(x):
-    return [map_lowest_level(i, func) for i in x]
+    return [map_lowest_level(func, i) for i in x]
   else:
     return func(x)
 
@@ -32,7 +32,7 @@ def try_to_int(x):
 
 def map_to_int_where_possible(iter):
   """Returns an iterable where each element is converted to an integer if possible for that element."""
-  return map_lowest_level(iter, try_to_int)
+  return map_lowest_level(try_to_int, iter)
 
 
 class GamsPandasDatabase:
@@ -79,38 +79,6 @@ class GamsPandasDatabase:
     """Dictionary of all parameters in the underlying GAMS database"""
     return {symbol.name: symbol for symbol in self.database if isinstance(symbol, gams.GamsParameter)}
 
-  def add_set(self, identifier, dimension=1, explanatory_text=""):
-    """Add set symbol to database."""
-    self.database.add_set(identifier, dimension, explanatory_text)
-
-  def add_set_dc(self, identifier, domains, explanatory_text=""):
-    """Add set symbol to database using domain information."""
-    self.database.add_set_dc(identifier, [self.symbols[i] for i in domains], explanatory_text)
-
-  def add_parameter(self, identifier, dimension, explanatory_text=""):
-    """Add parameter symbol to database."""
-    self.database.add_parameter(identifier, dimension, explanatory_text)
-
-  def add_parameter_dc(self, identifier, domain_names, explanatory_text=""):
-    """Add parameter symbol to database using domain information."""
-    self.database.add_parameter_dc(identifier, domain_names, explanatory_text)
-    self.series[identifier] = pd.Series(
-      index=pd.MultiIndex.from_product([self[i] for i in domain_names], names=domain_names),
-      name=identifier,
-    )
-
-  def add_variable(self, identifier, dimension, explanatory_text="", vartype=gams.VarType.Free):
-    """Add variable symbol to database."""
-    self.database.add_variable(identifier, dimension, vartype, explanatory_text)
-
-  def add_variable_dc(self, identifier, domain_names, explanatory_text="", vartype=gams.VarType.Free):
-    """Add variable symbol to database using domain information."""
-    self.database.add_variable_dc(identifier, vartype, domain_names, explanatory_text)
-    self.series[identifier] = pd.Series(
-      index=pd.MultiIndex.from_product([self[i] for i in domain_names], names=domain_names),
-      name=identifier,
-    )
-
   def add_to_builtins(self, *args):
     """Retrieve any number symbol names from the database and add their Pandas representations to the global namespace."""
     for identifier in args:
@@ -128,7 +96,7 @@ class GamsPandasDatabase:
     self.database.add_set_dc(series.name, domains, explanatory_text)
     series.index.texts = series
     series.index.name = series.name
-    self[series.name] = series.index
+    self.series[series.name] = series.index
 
   def add_set_from_index(self, index, explanatory_text=""):
     """Add set symbol to database based on a Pandas index."""
@@ -136,7 +104,7 @@ class GamsPandasDatabase:
     if domains == [index.name]:
       domains = ["*"]
     self.database.add_set_dc(index.name, domains, explanatory_text)
-    self[index.name] = index
+    self.series[index.name] = index
 
   def add_parameter_from_series(self, series, explanatory_text="", add_missing_domains=False):
     """Add parameter symbol to database based on a Pandas series."""
@@ -155,8 +123,8 @@ class GamsPandasDatabase:
           self.add_set_from_series(df[d])
         else:
           raise KeyError(f"'{d}' is not a set in the database. Enable add_missing_domains or add the set to the database manually.")
-    self.add_parameter_dc(identifier, domains, explanatory_text)
-    self[identifier] = df.set_index(domains).iloc[:, 0]
+    self.database.add_parameter_dc(identifier, domains, explanatory_text)
+    self.series[identifier] = df.set_index(domains).iloc[:, 0]
 
   def add_variable_from_series(self, series, explanatory_text="", add_missing_domains=False):
     """Add variable symbol to database based on a Pandas series."""
@@ -166,26 +134,45 @@ class GamsPandasDatabase:
       df = series.reset_index()
     self.add_variable_from_dataframe(series.name, df, explanatory_text, add_missing_domains)
 
-  def create_set(self, name, index, explanatory_text="", texts=None):
-    if index and is_iterable(index[0]):
+  def get_index(self, x):
+    if x is None:
+      return None
+    elif isinstance(x, str):
+      return self[x]
+    elif len(x) and isinstance(x[0], str):
+      multi_index = pd.MultiIndex.from_product([self[i] for i in x])
+      multi_index.names = x
+      return multi_index
+    elif len(x) and isinstance(x[0], pd.Index):
+      multi_index = pd.MultiIndex.from_product(x)
+      multi_index.names = [getattr(i, "name", None) for i in x]
+      return multi_index
+    else:
+      return pd.Index(x)
+
+  def create_set(self, name, index, explanatory_text="", texts=None, names=None):
+    if len(index) and isinstance(index[0], pd.Index):
       multi_index = pd.MultiIndex.from_product(index)
       multi_index.names = [getattr(i, "name", None) for i in index]
       index = multi_index
     else:
       index = pd.Index(index)
-    index.name = name
     index.explanatory_text = explanatory_text
-    index.texts = texts
+    if names is not None:
+      index.names = names
+
+    if texts is None:
+      texts = map_lowest_level(str, index)
+    index.texts = pd.Series(texts, index=index)
+    index.texts.name = index.name
+
+    index.name = name
     self.add_set_from_index(index, explanatory_text)
     return self[name]
 
   def create_variable(self, name, index=None, explanatory_text="", data=None, dtype=None, copy=False, add_missing_domains=False):
     if index is not None:
-      if not isinstance(index, pd.Index) and len(index) and is_iterable(index[0]):
-        multi_index = pd.MultiIndex.from_product(index)
-        multi_index.names = [i.name for i in index]
-        index = multi_index
-      series = pd.Series(data, index, dtype, name, copy)
+      series = pd.Series(data, self.get_index(index), dtype, name, copy)
       series.explanatory_text = explanatory_text
       self.add_variable_from_series(series, explanatory_text, add_missing_domains)
     elif isinstance(data, pd.DataFrame):
@@ -204,11 +191,7 @@ class GamsPandasDatabase:
 
   def create_parameter(self, name, index=None, explanatory_text="", data=None, dtype=None, copy=False, add_missing_domains=False):
     if index is not None:
-      if not isinstance(index, pd.Index) and len(index) and is_iterable(index[0]):
-        multi_index = pd.MultiIndex.from_product(index)
-        multi_index.names = [i.name for i in index]
-        index = multi_index
-      series = pd.Series(data, index, dtype, name, copy)
+      series = pd.Series(data, self.get_index(index), dtype, name, copy)
       series.explanatory_text = explanatory_text
       self.add_parameter_from_series(series, explanatory_text, add_missing_domains)
     elif isinstance(data, pd.DataFrame):
@@ -217,11 +200,11 @@ class GamsPandasDatabase:
       self.add_parameter_from_series(data, explanatory_text, add_missing_domains)
     else:
       if is_iterable(data) and len(data) and is_iterable(data[0]):
-        self.add_parameter(name, len(data[0]), explanatory_text)
+        self.database.add_parameter(name, len(data[0]), explanatory_text)
       elif is_iterable(data):
-        self.add_parameter(name, 1, explanatory_text)
+        self.database.add_parameter(name, 1, explanatory_text)
       else:
-        self.add_parameter(name, 0, explanatory_text)
+        self.database.add_parameter(name, 0, explanatory_text)
       self[name] = data
     return self[name]
 
@@ -234,8 +217,8 @@ class GamsPandasDatabase:
           self.add_set_from_series(df[d])
         else:
           raise KeyError(f"'{d}' is not a set in the database. Enable add_missing_domains or add the set to the database manually.")
-    self.add_variable_dc(identifier, domains, explanatory_text)
-    self[identifier] = df.set_index(domains).iloc[:, 0]
+    self.database.add_variable_dc(identifier, gams.VarType.Free, domains, explanatory_text)
+    self.series[identifier] = df.set_index(domains).iloc[:, 0]
 
   @staticmethod
   @np.vectorize
@@ -346,7 +329,7 @@ def set_symbol_records(symbol, value):
     add_record(symbol, None, value[0])
   else:
     for k, v in value.items():
-      add_record(symbol, map_lowest_level(k, str), v)
+      add_record(symbol, map_lowest_level(str, k), v)
 
 
 def index_names_from_symbol(symbol):
@@ -362,10 +345,10 @@ def index_names_from_symbol(symbol):
 
 def index_from_symbol(symbol):
   """Return a MultiIndex based on the records and domain names of a GAMS symbol."""
-  if len(symbol.domains) > 1:
+  if len(symbol.domains_as_strings) > 1:
     keys = map_to_int_where_possible([rec.keys for rec in symbol])
     index = pd.MultiIndex.from_tuples(keys, names=index_names_from_symbol(symbol))
-  elif len(symbol.domains) == 1:
+  elif len(symbol.domains_as_strings) == 1:
     keys = map_to_int_where_possible([rec.keys[0] for rec in symbol])
     index = pd.Index(keys, name=index_names_from_symbol(symbol)[0])
   else:
@@ -376,7 +359,7 @@ def index_from_symbol(symbol):
 
 
 def symbol_is_scalar(symbol):
-  return not symbol.domains
+  return not symbol.domains_as_strings
 
 
 def series_from_variable(symbol, attr="level"):
@@ -428,33 +411,13 @@ def test_gdx_read():
   assert approximately_equal(Gdx("test.gdx")["qI_s"]["IB", "fre", 2010], 4.43)  # "IB" should be changed to "iB" in the GDX file.
   assert approximately_equal(Gdx("test.gdx")["eCx"], 1)
 
-
-def test_add_symbols():
-  db = GamsPandasDatabase()
-  db.add_set("year", 1, "Years")
-  db.add_set("sector", 1, "Sectors")
-  db["year"] = pd.Index(range(2010, 2026), name="t")
-  db["sector"] = pd.Index(["ser", "goo"], name="s")
-  db.add_parameter_dc("par", ["year", "sector"], explanatory_text="Parameter added from Python.")
-  db.add_variable_dc("var", ["year", "sector"], explanatory_text="Variable added from Python.")
-  db["par"] = 1
-  db["var"] = 1
-  assert all(db["par"] == db["var"])
-  db["var"][2020] = 2
-  assert any(db["par"] == db["var"])
-  assert not all(db["par"] == db["var"])
-  db["var"] = 2
-  assert not any(db["par"] == db["var"])
-  assert db.get_text("var") == "Variable added from Python."
-
-
 def test_add_set_from_index():
   db = GamsPandasDatabase()
   t = pd.Index(range(2010, 2026), name="t")
   db.add_set_from_index(t)
   assert db["t"].name == "t"
   assert all(db["t"] == t)
-  assert db.symbols["t"].domains == ["*"]
+  assert db.symbols["t"].domains_as_strings == ["*"]
 
   s = pd.Index(["services", "goods"], name="s")
   st = pd.MultiIndex.from_product([s, t], names=["s", "t"])
@@ -462,8 +425,7 @@ def test_add_set_from_index():
   db.add_set_from_index(st)
   assert db["st"].name == "st"
   assert all(db["st"] == st[:])
-  assert db.symbols["st"].domains == ["s", "t"]
-
+  assert db.symbols["st"].domains_as_strings == ["s", "t"]
 
 def test_add_set_from_series():
   db = GamsPandasDatabase()
@@ -473,7 +435,7 @@ def test_add_set_from_series():
   assert db["t"].name == "t"
   assert all(db["t"].texts == t)
   assert all(db["t"] == t.index)
-  assert db.symbols["t"].domains == ["*"]
+  assert db.symbols["t"].domains_as_strings == ["*"]
 
   tsub = t[5:]
   tsub.name = "tsub"
@@ -481,7 +443,7 @@ def test_add_set_from_series():
   assert db["tsub"].name == "tsub"
   assert all(db["tsub"].texts == tsub)
   assert all(db["tsub"] == tsub.index)
-  assert db.symbols["tsub"].domains == ["t"]
+  assert db.symbols["tsub"].domains_as_strings == ["t"]
 
   s = pd.Index(["services", "goods"], name="s")
   st = pd.MultiIndex.from_product([s, t], names=["s", "t"])
@@ -490,8 +452,7 @@ def test_add_set_from_series():
   assert db["st"].name == "st"
   assert all(db["st"].texts == st)
   assert all(db["st"] == st.index)
-  assert db.symbols["st"].domains == ["s", "t"]
-
+  assert db.symbols["st"].domains_as_strings == ["s", "t"]
 
 def test_add_parameter_from_dataframe():
   db = GamsPandasDatabase()
@@ -501,7 +462,6 @@ def test_add_parameter_from_dataframe():
   db.add_parameter_from_dataframe("par", df, add_missing_domains=True)
   assert all(db["par"] == 1.3)
   assert len(db["par"]) == 16
-
 
 def test_multiply_added():
   db = GamsPandasDatabase()
@@ -525,7 +485,6 @@ def test_multiply_added():
 
   assert db["v"][2020, "goo"] == 4.8
 
-
 def test_add_parameter_from_series():
   db = GamsPandasDatabase()
   t = pd.Index(range(2010, 2026), name="t")
@@ -534,7 +493,6 @@ def test_add_parameter_from_series():
   assert all(db["par"] == 1.4)
   assert len(db["par"]) == 16
 
-
 def test_add_variable_from_series():
   db = GamsPandasDatabase()
   t = pd.Index(range(2010, 2026), name="t")
@@ -542,7 +500,6 @@ def test_add_variable_from_series():
   db.add_variable_from_series(var, add_missing_domains=True)
   assert all(db["var"] == 1.4)
   assert len(db["var"]) == 16
-
 
 def test_add_variable_from_dataframe():
   db = GamsPandasDatabase()
@@ -554,18 +511,15 @@ def test_add_variable_from_dataframe():
   ], columns=["t", "s", "value"])
   db.add_variable_from_dataframe("q", df, add_missing_domains=True)
 
-
 def test_multiply_with_different_sets():
   assert approximately_equal(
     sum(Gdx("test.gdx")["qBNP"] * Gdx("test.gdx")["qI"] * Gdx("test.gdx")["qI_s"]),
     50730260150
   )
 
-
 def test_export_with_no_changes():
   Gdx("test.gdx").export("test_export.gdx", relative_path=True)
   assert round(os.stat("test.gdx").st_size, -5) == round(os.stat("test_export.gdx").st_size, -5)
-
 
 def test_export_variable_with_changes():
   gdx = Gdx("test.gdx")
@@ -602,7 +556,7 @@ def test_copy_set():
 
 def test_export_added_variable():
   gdx = Gdx("test.gdx")
-  gdx.add_variable_dc(identifier="foo", domain_names=["a", "t"], explanatory_text="Variable added from Python.")
+  gdx.create_variable("foo", ["a", "t"], explanatory_text="Variable added from Python.")
   gdx["foo"] = 42
   gdx.export("test_export.gdx", relative_path=True)
   assert all(approximately_equal(Gdx("test_export.gdx")["foo"], 42))
@@ -622,12 +576,21 @@ def test_create_methods():
   Par, Var, Set = db.create_parameter, db.create_variable, db.create_set
 
   # Create sets from scratch
-  t = Set("t", range(2000, 2020), "Årstal")
-  s = Set("s", ["tjenester", "fremstilling"], "Brancher")
+  t = Set("t", range(2000, 2021), "Årstal")
+  s = Set("s", ["tjenester", "fremstilling"], "Brancher", ["Tjenester", "Fremstilling"])
   st = Set("st", [s, t], "Branche x år dummy")
+  sub = Set("sub", ["tjenester"], "Subset af brancher", names=["s"])
+
+  one2one = Set("one2one", [(2010, 2015), (2011, 2016)], "1 til 1 mapping", names=["t", "t"])
+
+  one2many = Set("one2many",
+                 [("tot", "tjenester"), ("tot", "fremstilling")],
+                 "1 til mange mapping", names=["*","s"],
+             )
 
   # Create parameters and variables based on zero ore more sets
   gq = Par("gq", None, "Produktivitets-vækst", 0.01)
   fq = Par("fp", t, "Vækstkorrektionsfaktor", (1 + 0.01)**(t-2010))
   d = Par("d", st, "Dummy")
   y = Var("y", [s,t], "Produktion")
+
