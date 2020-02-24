@@ -59,6 +59,33 @@ class GamsPandasDatabase:
     obj.series = deepcopy(self.series)
     return obj
 
+  def merge(self, other, symbol_names=None, inplace=False):
+    """
+    Merge two GamsPandasDatabases.
+    symbol_names: list of symbol names to get from other. If None, all symbols in other are merged.
+    """
+    if inplace:
+      db = self
+    else:
+      db = self.copy()
+
+    if symbol_names is None:
+      symbol_names = other.symbols
+
+    for name in other.sets:
+      if name in symbol_names:
+        db.add_set_from_series(other[name].texts, other[name].explanatory_text)
+
+    for name in other.variables:
+      if name in symbol_names:
+        db.add_variable_from_series(other[name], other[name].explanatory_text)
+
+    for name in other.parameters:
+      if name in symbol_names:
+        db.add_parameter_from_series(other[name], other[name].explanatory_text)
+
+    return db
+
   @property
   def symbols(self):
     """Dictionary of all symbols in the underlying GAMS database"""
@@ -236,20 +263,25 @@ class GamsPandasDatabase:
   def __getitem__(self, item):
     if item not in self.series:
       symbol = self.symbols[item]
+
       if isinstance(symbol, gams.GamsSet):
         self.series[item] = index_from_symbol(symbol)
+
       elif isinstance(symbol, gams.GamsVariable):
         if symbol_is_scalar(symbol):
           self.series[item] = symbol.find_record().level if len(symbol) else None
         else:
           self.series[item] = series_from_variable(symbol)
+
       elif isinstance(symbol, gams.GamsParameter):
         if symbol_is_scalar(symbol):
           self.series[item] = symbol.find_record().value if len(symbol) else None
         else:
           self.series[item] = series_from_parameter(symbol)
+
       elif isinstance(symbol, gams.GamsEquation):
         return symbol
+
     return self.series[item]
 
   def __setitem__(self, name, value):
@@ -348,6 +380,7 @@ def index_from_symbol(symbol):
   if len(symbol.domains_as_strings) > 1:
     keys = map_to_int_where_possible([rec.keys for rec in symbol])
     index = pd.MultiIndex.from_tuples(keys, names=index_names_from_symbol(symbol))
+    index.name = symbol.name
   elif len(symbol.domains_as_strings) == 1:
     keys = map_to_int_where_possible([rec.keys[0] for rec in symbol])
     index = pd.Index(keys, name=index_names_from_symbol(symbol)[0])
@@ -407,9 +440,11 @@ def approximately_equal(x, y, ndigits=0):
 
 
 def test_gdx_read():
-  assert approximately_equal(Gdx("test.gdx")["qY"]["byg", 2010], 191)
-  assert approximately_equal(Gdx("test.gdx")["qI_s"]["IB", "fre", 2010], 4.43)  # "IB" should be changed to "iB" in the GDX file.
-  assert approximately_equal(Gdx("test.gdx")["eCx"], 1)
+  gdx = Gdx("test.gdx")
+  assert approximately_equal(gdx["qY"]["byg", 2010], 191)
+  assert approximately_equal(gdx["qI_s"]["IB", "fre", 2010], 4.43)  # "IB" should be changed to "iB" in the GDX file.
+  assert approximately_equal(gdx["eCx"], 1)
+  assert gdx["s"].name == "s_"
 
 def test_add_set_from_index():
   db = GamsPandasDatabase()
