@@ -7,16 +7,22 @@ def unstack_multiseries(series, keep_axis_index=-1):
   All levels of the Series are unstacked and concatenated as column names, except <keep_axis_index>.
   """
   if isinstance(series.index, pd.MultiIndex):
-    df = series.copy()
+    series = series.copy()
     if series.name is None:
       series.name = ""
-    df.index = pd.MultiIndex.from_tuples((f"{series.name}[{','.join(i[:keep_axis_index:])}]", i[keep_axis_index]) for i in df.index)
-    df = df.unstack(0)
+    series.index = pd.MultiIndex.from_tuples(flatten_keys(series.name, keys, keep_axis_index) for keys in series.index)
+    df = series.unstack(0)
   else:
     df = pd.DataFrame(series)
   df.index = pd.to_numeric(df.index)
   df.index.name = "t"
   return df
+
+
+def flatten_keys(name, keys, keep_axis_index):
+  keys_str = ','.join(map(str, keys[:keep_axis_index:]))
+  flat_name = f"{name}[{keys_str}]"
+  return flat_name, keys[keep_axis_index]
 
 
 def merge_multiseries(*series, keep_axis_index=-1):
