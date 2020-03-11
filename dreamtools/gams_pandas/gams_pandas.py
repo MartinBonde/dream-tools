@@ -162,15 +162,11 @@ class GamsPandasDatabase:
     self.add_variable_from_dataframe(series.name, df, explanatory_text, add_missing_domains)
 
   def get_index(self, x):
-    if x is None:
-      return None
+    if x is None or isinstance(x, pd.Index):
+      return x
     elif isinstance(x, str):
       return self[x]
-    elif len(x) and isinstance(x[0], str):
-      multi_index = pd.MultiIndex.from_product([self[i] for i in x])
-      multi_index.names = x
-      return multi_index
-    elif len(x) and isinstance(x[0], pd.Index):
+    elif len(x) and isinstance(x[0], (pd.Index, tuple, list)):
       multi_index = pd.MultiIndex.from_product(x)
       multi_index.names = [getattr(i, "name", None) for i in x]
       return multi_index
@@ -365,13 +361,18 @@ def set_symbol_records(symbol, value):
 
 
 def index_names_from_symbol(symbol):
-  """Return the domain names of a GAMS symbol with '*' replaced by 'index_{i}'"""
-  index_names = []
-  for i, name in enumerate(symbol.domains_as_strings):
-    if name != "*":
-      index_names.append(name)
-    else:
-      index_names.append(f"index_{i}")
+  """
+  Return the domain names of a GAMS symbol,
+  except ['*'] cases are replaced by the name of the symbol
+  and ['*',..,'*'] cases are replaced with ['index_0',..'index_n']
+  """
+  index_names = list(symbol.domains_as_strings)
+  if index_names == ["*"]:
+    return [symbol.name]
+  if index_names.count("*") > 1:
+    for i, name in enumerate(index_names):
+      if name == "*":
+        index_names[i] = f"index_{i}"
   return index_names
 
 
@@ -591,7 +592,7 @@ def test_copy_set():
 
 def test_export_added_variable():
   gdx = Gdx("test.gdx")
-  gdx.create_variable("foo", ["a", "t"], explanatory_text="Variable added from Python.")
+  gdx.create_variable("foo", [gdx.a, gdx.t], explanatory_text="Variable added from Python.")
   gdx["foo"] = 42
   gdx.export("test_export.gdx", relative_path=True)
   assert all(approximately_equal(Gdx("test_export.gdx")["foo"], 42))
@@ -629,3 +630,7 @@ def test_create_methods():
   d = Par("d", st, "Dummy")
   y = Var("y", [s,t], "Produktion")
 
+  assert gq == 0.01
+  assert all(fq.loc[2010:2011] == [1, 1.01])
+  assert pd.isna(d["tjenester",2010])
+  assert pd.isna(y["tjenester",2010])
