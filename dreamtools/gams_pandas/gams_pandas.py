@@ -26,7 +26,10 @@ def map_lowest_level(func, x):
 
 def try_to_int(x):
   try:
-    return int(x)
+    if str(int(x)) == str(x):
+      return int(x)
+    else:
+      return x
   except ValueError:
     return x
 
