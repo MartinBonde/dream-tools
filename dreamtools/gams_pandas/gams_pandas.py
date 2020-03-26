@@ -109,6 +109,11 @@ class GamsPandasDatabase:
     """Dictionary of all parameters in the underlying GAMS database"""
     return {symbol.name: symbol for symbol in self.database if isinstance(symbol, gams.GamsParameter)}
 
+  @property
+  def equations(self):
+    """Dictionary of all equations in the underlying GAMS database"""
+    return {symbol.name: symbol for symbol in self.database if isinstance(symbol, gams.GamsEquation)}
+
   def add_to_builtins(self, *args):
     """Retrieve any number symbol names from the database and add their Pandas representations to the global namespace."""
     for identifier in args:

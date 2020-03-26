@@ -3,6 +3,7 @@ import dreamtools as dt
 
 # Åben gdx fil
 gdx = dt.Gdx("test.gdx")
+gdx.export("export.gdx")
 
 # Hent sets fra gdx
 s, i, t = gdx.get("s", "i", "t")
