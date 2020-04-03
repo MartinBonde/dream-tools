@@ -186,7 +186,7 @@ class GamsPandasDatabase:
       multi_index = pd.MultiIndex.from_product(index)
       multi_index.names = [getattr(i, "name", None) for i in index]
       index = multi_index
-    else:
+    elif not isinstance(index, pd.Index):
       index = pd.Index(index)
     index.explanatory_text = explanatory_text
     if names is not None:
