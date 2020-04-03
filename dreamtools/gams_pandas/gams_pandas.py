@@ -348,15 +348,15 @@ def set_symbol_records(symbol, value):
       texts = getattr(value, "texts", None)
       value = texts if texts is not None else pd.Series(map(str, value), index=value)
     def add_record(symbol, k, v):
-      if not pd.isna(v):
+      if v is not np.nan:
         symbol.add_record(k).text = str(v)
   elif isinstance(symbol, gams.GamsVariable):
     def add_record(symbol, k, v):
-      if not pd.isna(v):
+      if v is not np.nan:
         symbol.add_record(k).level = v
   elif isinstance(symbol, gams.GamsParameter):
     def add_record(symbol, k, v):
-      if not pd.isna(v):
+      if v is not np.nan:
         symbol.add_record(k).value = v
   else:
     TypeError(f"{type(symbol)} is not (yet) supported by gams_pandas")
