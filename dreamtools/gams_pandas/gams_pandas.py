@@ -1,8 +1,7 @@
 """
 """
-import inspect
 import os
-from collections.abc import Mapping, Iterable
+from collections.abc import Iterable
 from six import string_types
 
 import numpy as np
@@ -125,21 +124,7 @@ class GamsPandasDatabase:
 
   def add_set_from_series(self, series, explanatory_text=""):
     """Add set symbol to database based on a Pandas series."""
-    domains = ["*" if i is None else i for i in series.index.names]
-    if domains == [series.name]:
-      domains = ["*"]
-    self.database.add_set_dc(series.name, domains, explanatory_text)
-    series.index.texts = series
-    series.index.name = series.name
-    self.series[series.name] = series.index
-
-  def add_set_from_index(self, index, explanatory_text=""):
-    """Add set symbol to database based on a Pandas index."""
-    domains = ["*" if i is None else i for i in index.names]
-    if domains == [index.name]:
-      domains = ["*"]
-    self.database.add_set_dc(index.name, domains, explanatory_text)
-    self.series[index.name] = index
+    self.create_set(series.name, series.index, explanatory_text, texts=series)
 
   def add_parameter_from_series(self, series, explanatory_text="", add_missing_domains=False):
     """Add parameter symbol to database based on a Pandas series."""
@@ -181,24 +166,48 @@ class GamsPandasDatabase:
     else:
       return pd.Index(x)
 
-  def create_set(self, name, index, explanatory_text="", texts=None, names=None):
+  def get_domains_from_index(self, index, name):
+    if hasattr(index, "domains"):
+      domains = index.domains
+    elif hasattr(index, "name"):
+      domains = index.names
+    else:
+      domains = [index.name]
+    return ["*" if i in (None, name) else i for i in domains]
+
+  def create_set(self, name, index, explanatory_text="", texts=None, domains=None):
+    """
+    Add a new GAMS Set to the database and return an Pandas representation of the Set.
+    :param str name: Name of the set
+    :param iterable index: Iterable of record keys to be added to the set
+    :param str explanatory_text: Explanatory text added to the GAMS set
+    :param iterable texts: Iterable of record labels - should match the size of the index parameter.
+    :param iterable domains: Names of domains that the set should be defined over
+    :return: Pandas Index
+    """
     if len(index) and isinstance(index[0], pd.Index):
       multi_index = pd.MultiIndex.from_product(index)
       multi_index.names = [getattr(i, "name", None) for i in index]
       index = multi_index
-    elif not isinstance(index, pd.Index):
+    elif isinstance(index, pd.Index):
+      index = index.copy()
+    else:
       index = pd.Index(index)
+
     index.explanatory_text = explanatory_text
-    if names is not None:
-      index.names = names
 
     if texts is None:
       texts = map_lowest_level(str, index)
     index.texts = pd.Series(texts, index=index)
     index.texts.name = index.name
 
+    if domains is None:
+      domains = ["*" if i in (None, name) else i for i in self.get_domains_from_index(index, name)]
+    index.domains = domains
     index.name = name
-    self.add_set_from_index(index, explanatory_text)
+
+    self.database.add_set_dc(index.name, domains, explanatory_text)
+    self.series[index.name] = index
     return self[name]
 
   def create_variable(self, name, index=None, explanatory_text="", data=None, dtype=None, copy=False, add_missing_domains=False):
@@ -316,7 +325,7 @@ class GamsPandasDatabase:
   def export(self, path):
     """Save changes to database and export database to GDX file."""
     self.save_series_to_database()
-    self.database.export(path)
+    self.database.export(os.path.abspath(path))
 
   def __iter__(self):
     return iter(self.symbols)
@@ -340,7 +349,6 @@ def merge_symbol_records(series, symbol):
   for k, v in series.items():
     setattr(symbol.merge_record(k), attr, v)
 
-
 def set_symbol_records(symbol, value):
   """Convert Pandas series to records in a GAMS Symbol"""
   if isinstance(symbol, gams.GamsSet):
@@ -348,15 +356,15 @@ def set_symbol_records(symbol, value):
       texts = getattr(value, "texts", None)
       value = texts if texts is not None else pd.Series(map(str, value), index=value)
     def add_record(symbol, k, v):
-      if v is not np.nan:
+      if not pd.isna(v):
         symbol.add_record(k).text = str(v)
   elif isinstance(symbol, gams.GamsVariable):
     def add_record(symbol, k, v):
-      if v is not np.nan:
+      if not pd.isna(v):
         symbol.add_record(k).level = v
   elif isinstance(symbol, gams.GamsParameter):
     def add_record(symbol, k, v):
-      if v is not np.nan:
+      if not pd.isna(v):
         symbol.add_record(k).value = v
   else:
     TypeError(f"{type(symbol)} is not (yet) supported by gams_pandas")
@@ -369,7 +377,6 @@ def set_symbol_records(symbol, value):
   else:
     for k, v in value.items():
       add_record(symbol, map_lowest_level(str, k), v)
-
 
 def index_names_from_symbol(symbol):
   """
@@ -386,9 +393,8 @@ def index_names_from_symbol(symbol):
         index_names[i] = f"index_{i}"
   return index_names
 
-
 def index_from_symbol(symbol):
-  """Return a MultiIndex based on the records and domain names of a GAMS symbol."""
+  """Return a Pandas Index based on the records and domain names of a GAMS symbol."""
   if len(symbol.domains_as_strings) > 1:
     keys = map_to_int_where_possible([rec.keys for rec in symbol])
     index = pd.MultiIndex.from_tuples(keys, names=index_names_from_symbol(symbol))
@@ -399,23 +405,21 @@ def index_from_symbol(symbol):
   else:
     return None
   if isinstance(symbol, gams.GamsSet):
+    index.text = symbol.text
+    index.domains = symbol.domains_as_strings
     index.texts = pd.Series([rec.text for rec in symbol], index, name=symbol.name)
   return index
 
-
 def symbol_is_scalar(symbol):
   return not symbol.domains_as_strings
-
 
 def series_from_variable(symbol, attr="level"):
   """Get a variable symbol from the GAMS database and return an equivalent Pandas series."""
   return pd.Series([getattr(rec, attr) for rec in symbol], index_from_symbol(symbol), name=symbol.name)
 
-
 def series_from_parameter(symbol):
   """Get a parameter symbol from the GAMS database and return an equivalent Pandas series."""
   return pd.Series([rec.value for rec in symbol], index_from_symbol(symbol), name=symbol.name)
-
 
 class Gdx(GamsPandasDatabase):
   """Wrapper that opens a GDX file as a GamsPandasDatabase."""
@@ -429,7 +433,7 @@ class Gdx(GamsPandasDatabase):
     database = workspace.add_database_from_gdx(self.abs_path)
     super().__init__(database)
 
-  def export(self, path=None, relative_path=False):
+  def export(self, path=None, relative_path=True):
     """
     Save changes to database and export database to GDX file.
     If no path is specified, the path of the linked GDX file is used, overwriting the original.
@@ -443,205 +447,4 @@ class Gdx(GamsPandasDatabase):
     super().export(path)
 
 
-# ----------------------------------------------------------------------------------------------------------------------
-# Unit Tests
-# ----------------------------------------------------------------------------------------------------------------------
-@np.vectorize
-def approximately_equal(x, y, ndigits=0):
-  return round(x, ndigits) == round(y, ndigits)
 
-
-def test_gdx_read():
-  gdx = Gdx("test.gdx")
-  assert approximately_equal(gdx["qY"]["byg", 2010], 191)
-  assert approximately_equal(gdx["qI_s"]["IB", "fre", 2010], 4.43)  # "IB" should be changed to "iB" in the GDX file.
-  assert approximately_equal(gdx["eCx"], 1)
-  assert gdx["s"].name == "s_"
-
-def test_add_set_from_index():
-  db = GamsPandasDatabase()
-  t = pd.Index(range(2010, 2026), name="t")
-  db.add_set_from_index(t)
-  assert db["t"].name == "t"
-  assert all(db["t"] == t)
-  assert db.symbols["t"].domains_as_strings == ["*"]
-
-  s = pd.Index(["services", "goods"], name="s")
-  st = pd.MultiIndex.from_product([s, t], names=["s", "t"])
-  st.name = "st"
-  db.add_set_from_index(st)
-  assert db["st"].name == "st"
-  assert all(db["st"] == st[:])
-  assert db.symbols["st"].domains_as_strings == ["s", "t"]
-
-def test_add_set_from_series():
-  db = GamsPandasDatabase()
-  t = pd.Index(range(2010, 2026), name="t")
-  t = pd.Series([f"Year {i}" for i in t], index=t, name="t")
-  db.add_set_from_series(t)
-  assert db["t"].name == "t"
-  assert all(db["t"].texts == t)
-  assert all(db["t"] == t.index)
-  assert db.symbols["t"].domains_as_strings == ["*"]
-
-  tsub = t[5:]
-  tsub.name = "tsub"
-  db.add_set_from_series(tsub)
-  assert db["tsub"].name == "tsub"
-  assert all(db["tsub"].texts == tsub)
-  assert all(db["tsub"] == tsub.index)
-  assert db.symbols["tsub"].domains_as_strings == ["t"]
-
-  s = pd.Index(["services", "goods"], name="s")
-  st = pd.MultiIndex.from_product([s, t], names=["s", "t"])
-  st = pd.Series([str(i) for i in st], index=st, name="st")
-  db.add_set_from_series(st)
-  assert db["st"].name == "st"
-  assert all(db["st"].texts == st)
-  assert all(db["st"] == st.index)
-  assert db.symbols["st"].domains_as_strings == ["s", "t"]
-
-def test_add_parameter_from_dataframe():
-  db = GamsPandasDatabase()
-  df = pd.DataFrame()
-  df["t"] = range(2010, 2026)
-  df["value"] = 1.3
-  db.add_parameter_from_dataframe("par", df, add_missing_domains=True)
-  assert all(db["par"] == 1.3)
-  assert len(db["par"]) == 16
-
-def test_multiply_added():
-  db = GamsPandasDatabase()
-  df = pd.DataFrame([
-    [2010, "ser", 3],
-    [2010, "goo", 2],
-    [2020, "ser", 6],
-    [2020, "goo", 4],
-  ], columns=["t", "s", "value"])
-  db.add_parameter_from_dataframe("q", df, add_missing_domains=True)
-
-  df = pd.DataFrame([
-    [2010, 1],
-    [2020, 1.2],
-  ], columns=["t", "value"])
-  db.add_parameter_from_dataframe("p", df, add_missing_domains=True)
-
-  v = db["p"] * db["q"]
-  v.name = "v"
-  db.add_parameter_from_series(v)
-
-  assert db["v"][2020, "goo"] == 4.8
-
-def test_add_parameter_from_series():
-  db = GamsPandasDatabase()
-  t = pd.Index(range(2010, 2026), name="t")
-  par = pd.Series(1.4, index=t, name="par")
-  db.add_parameter_from_series(par, add_missing_domains=True)
-  assert all(db["par"] == 1.4)
-  assert len(db["par"]) == 16
-
-def test_add_variable_from_series():
-  db = GamsPandasDatabase()
-  t = pd.Index(range(2010, 2026), name="t")
-  var = pd.Series(1.4, index=t, name="var")
-  db.add_variable_from_series(var, add_missing_domains=True)
-  assert all(db["var"] == 1.4)
-  assert len(db["var"]) == 16
-
-def test_add_variable_from_dataframe():
-  db = GamsPandasDatabase()
-  df = pd.DataFrame([
-    [2010, "ser", 3],
-    [2010, "goo", 2],
-    [2020, "ser", 6],
-    [2020, "goo", 4],
-  ], columns=["t", "s", "value"])
-  db.add_variable_from_dataframe("q", df, add_missing_domains=True)
-
-def test_multiply_with_different_sets():
-  assert approximately_equal(
-    sum(Gdx("test.gdx")["qBNP"] * Gdx("test.gdx")["qI"] * Gdx("test.gdx")["qI_s"]),
-    50730260150
-  )
-
-def test_export_with_no_changes():
-  Gdx("test.gdx").export("test_export.gdx", relative_path=True)
-  assert round(os.stat("test.gdx").st_size, -5) == round(os.stat("test_export.gdx").st_size, -5)
-
-def test_export_variable_with_changes():
-  gdx = Gdx("test.gdx")
-  gdx["qY"] = gdx["qY"] * 2
-  gdx.export("test_export.gdx", relative_path=True)
-  old, new = Gdx("test.gdx"), Gdx("test_export.gdx")
-  assert all(old["qY"] * 2 == new["qY"])
-
-
-def test_export_scalar_with_changes():
-  gdx = Gdx("test.gdx")
-  gdx["eCx"] = gdx["eCx"] * 2
-  gdx.export("test_export.gdx", relative_path=True)
-
-  old, new = Gdx("test.gdx"), Gdx("test_export.gdx")
-  assert approximately_equal(old["eCx"] * 2, new["eCx"])
-
-
-def test_export_set_with_changes():
-  gdx = Gdx("test.gdx")
-  gdx["s"].texts["tje"] = "New text"
-  gdx.export("test_export.gdx", relative_path=True)
-  assert Gdx("test_export.gdx")["s"].texts["tje"] == "New text"
-
-
-def test_copy_set():
-  gdx = Gdx("test.gdx")
-  gdx["alias"] = gdx["s"]
-  gdx["alias"].name = "alias"
-  gdx.add_set_from_index(gdx["alias"])
-  gdx.export("test_export.gdx", relative_path=True)
-  assert all(Gdx("test_export.gdx")["alias"] == gdx["s"])
-
-
-def test_export_added_variable():
-  gdx = Gdx("test.gdx")
-  gdx.create_variable("foo", [gdx.a, gdx.t], explanatory_text="Variable added from Python.")
-  gdx["foo"] = 42
-  gdx.export("test_export.gdx", relative_path=True)
-  assert all(approximately_equal(Gdx("test_export.gdx")["foo"], 42))
-
-
-def test_detuple():
-  assert GamsPandasDatabase.detuple("aaa") == "aaa"
-  assert GamsPandasDatabase.detuple(("aaa",)) == "aaa"
-  assert list(GamsPandasDatabase.detuple(("aaa", "bbb"))) == ["aaa", "bbb"]
-  assert GamsPandasDatabase.detuple(1) == 1
-  assert list(GamsPandasDatabase.detuple([1, 2])) == [1, 2]
-
-
-def test_create_methods():
-  # Create empty GamsPandasDatabase and alias creation methods
-  db = GamsPandasDatabase()
-  Par, Var, Set = db.create_parameter, db.create_variable, db.create_set
-
-  # Create sets from scratch
-  t = Set("t", range(2000, 2021), "Årstal")
-  s = Set("s", ["tjenester", "fremstilling"], "Brancher", ["Tjenester", "Fremstilling"])
-  st = Set("st", [s, t], "Branche x år dummy")
-  sub = Set("sub", ["tjenester"], "Subset af brancher", names=["s"])
-
-  one2one = Set("one2one", [(2010, 2015), (2011, 2016)], "1 til 1 mapping", names=["t", "t"])
-
-  one2many = Set("one2many",
-                 [("tot", "tjenester"), ("tot", "fremstilling")],
-                 "1 til mange mapping", names=["*","s"],
-             )
-
-  # Create parameters and variables based on zero ore more sets
-  gq = Par("gq", None, "Produktivitets-vækst", 0.01)
-  fq = Par("fp", t, "Vækstkorrektionsfaktor", (1 + 0.01)**(t-2010))
-  d = Par("d", st, "Dummy")
-  y = Var("y", [s,t], "Produktion")
-
-  assert gq == 0.01
-  assert all(fq.loc[2010:2011] == [1, 1.01])
-  assert pd.isna(d["tjenester",2010])
-  assert pd.isna(y["tjenester",2010])

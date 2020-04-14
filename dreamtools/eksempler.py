@@ -68,13 +68,13 @@ Par, Var, Set = db.create_parameter, db.create_variable, db.create_set
 t = Set("t", range(2000, 2020), "Årstal")
 s = Set("s", ["tjenester", "fremstilling"], "Brancher")
 st = Set("st", [s, t], "Branche x år dummy")
-sub = Set("sub", ["tjenester"], "Subset af brancher", names=["s"])
+sub = Set("sub", ["tjenester"], "Subset af brancher", domains=["s"])
 
-one2one = Set("one2one", [(2010, 2015), (2011, 2016)], "1 til 1 mapping", names=["t", "t"])
+one2one = Set("one2one", [(2010, 2015), (2011, 2016)], "1 til 1 mapping", domains=["t", "t"])
 
 one2many = Set("one2many",
                [("tot", "tjenester"), ("tot", "fremstilling")],
-               "1 til mange mapping", names=["*", "s"],
+               "1 til mange mapping", domains=["*", "s"],
                )
 
 # Definer nye parametre og variable, gerne ud fra sets
