@@ -221,11 +221,11 @@ class GamsPandasDatabase:
       self.add_variable_from_series(data, explanatory_text, add_missing_domains)
     else:
       if is_iterable(data) and len(data) and is_iterable(data[0]):
-        self.add_variable(name, len(data[0]), explanatory_text)
+        self.database.add_variable(name, len(data[0]), gams.VarType.Free ,explanatory_text)
       elif is_iterable(data):
-        self.add_variable(name, 1, explanatory_text)
+        self.database.add_variable(name, 1, gams.VarType.Free, explanatory_text)
       else:
-        self.add_variable(name, 0, explanatory_text)
+        self.database.add_variable(name, 0, gams.VarType.Free, explanatory_text)
       self[name] = data
     return self[name]
 
