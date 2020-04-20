@@ -221,7 +221,7 @@ class GamsPandasDatabase:
       self.add_variable_from_series(data, explanatory_text, add_missing_domains)
     else:
       if is_iterable(data) and len(data) and is_iterable(data[0]):
-        self.database.add_variable(name, len(data[0]), gams.VarType.Free ,explanatory_text)
+        self.database.add_variable(name, len(data[0]), gams.VarType.Free, explanatory_text)
       elif is_iterable(data):
         self.database.add_variable(name, 1, gams.VarType.Free, explanatory_text)
       else:
@@ -356,15 +356,15 @@ def set_symbol_records(symbol, value):
       texts = getattr(value, "texts", None)
       value = texts if texts is not None else pd.Series(map(str, value), index=value)
     def add_record(symbol, k, v):
-      if not pd.isna(v):
+      if not all_na(v):
         symbol.add_record(k).text = str(v)
   elif isinstance(symbol, gams.GamsVariable):
     def add_record(symbol, k, v):
-      if not pd.isna(v):
+      if not all_na(v):
         symbol.add_record(k).level = v
   elif isinstance(symbol, gams.GamsParameter):
     def add_record(symbol, k, v):
-      if not pd.isna(v):
+      if not all_na(v):
         symbol.add_record(k).value = v
   else:
     TypeError(f"{type(symbol)} is not (yet) supported by gams_pandas")
@@ -377,6 +377,13 @@ def set_symbol_records(symbol, value):
   else:
     for k, v in value.items():
       add_record(symbol, map_lowest_level(str, k), v)
+
+def all_na(x):
+  """Returns bool of whether a series or scalar consists of all NAs"""
+  if is_iterable(x):
+    return all(pd.isna(x))
+  else:
+    return pd.isna(x)
 
 def index_names_from_symbol(symbol):
   """

@@ -113,6 +113,13 @@ def test_add_parameter_from_series():
   assert all(db["par"] == 1.4)
   assert len(db["par"]) == 16
 
+def test_create_variable():
+  db = GamsPandasDatabase()
+  db.create_variable("scalar", data=1)
+  db.create_variable("vector", data=[1, 2])
+  db.export("test_export.gdx")
+  assert Gdx("test_export.gdx")["scalar"] == 1
+  assert all(Gdx("test_export.gdx")["vector"] == [1, 2])
 
 def test_add_variable_from_series():
   db = GamsPandasDatabase()
@@ -121,7 +128,6 @@ def test_add_variable_from_series():
   db.add_variable_from_series(var, add_missing_domains=True)
   assert all(db["var"] == 1.4)
   assert len(db["var"]) == 16
-
 
 def test_add_variable_from_dataframe():
   db = GamsPandasDatabase()
