@@ -235,6 +235,9 @@ def test_create_methods():
                  [("tot", "tjenester"), ("tot", "fremstilling")],
                  "1 til mange mapping", domains=["*", "s"],
                  )
+  assert one2many.name == "one2many"
+  assert one2many.names == ["*", "s"]
+  assert one2many.domains == ["*", "s"]
 
   # Create parameters and variables based on zero ore more sets
   gq = Par("gq", None, "Produktivitets-vækst", 0.01)

@@ -204,6 +204,7 @@ class GamsPandasDatabase:
     if domains is None:
       domains = ["*" if i in (None, name) else i for i in self.get_domains_from_index(index, name)]
     index.domains = domains
+    index.names = domains
     index.name = name
 
     self.database.add_set_dc(index.name, domains, explanatory_text)
