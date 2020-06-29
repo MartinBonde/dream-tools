@@ -228,6 +228,7 @@ class GamsPandasDatabase:
       else:
         self.database.add_variable(name, 0, gams.VarType.Free, explanatory_text)
       self[name] = data
+      self[name].attrs['type'] = 'variable'
     return self[name]
 
   def create_parameter(self, name, index=None, explanatory_text="", data=None, dtype=None, copy=False, add_missing_domains=False):
@@ -247,6 +248,7 @@ class GamsPandasDatabase:
       else:
         self.database.add_parameter(name, 0, explanatory_text)
       self[name] = data
+      self[name].attrs['type'] = 'parameter'
     return self[name]
 
   def add_variable_from_dataframe(self, identifier, df, explanatory_text="", add_missing_domains=False, value_column_index=-1):
@@ -423,11 +425,15 @@ def symbol_is_scalar(symbol):
 
 def series_from_variable(symbol, attr="level"):
   """Get a variable symbol from the GAMS database and return an equivalent Pandas series."""
-  return pd.Series([getattr(rec, attr) for rec in symbol], index_from_symbol(symbol), name=symbol.name)
+  obj = pd.Series([getattr(rec, attr) for rec in symbol], index_from_symbol(symbol), name=symbol.name)
+  obj.attrs['type'] = 'variable'
+  return obj
 
 def series_from_parameter(symbol):
   """Get a parameter symbol from the GAMS database and return an equivalent Pandas series."""
-  return pd.Series([rec.value for rec in symbol], index_from_symbol(symbol), name=symbol.name)
+  obj = pd.Series([rec.value for rec in symbol], index_from_symbol(symbol), name=symbol.name)
+  obj.attrs['type'] = 'parameter'
+  return obj
 
 class Gdx(GamsPandasDatabase):
   """Wrapper that opens a GDX file as a GamsPandasDatabase."""
