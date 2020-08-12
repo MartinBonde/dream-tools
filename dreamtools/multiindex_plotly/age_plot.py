@@ -8,7 +8,7 @@ import pandas as pd
 # def age_plot_2d(iter_series, operator=None, years=None, start_age=None, end_age=None, title="", reference_database=None):
 #   age_figure_2d(iter_series, operator, years, start_age, end_age, title, reference_database).show()
 
-def age_figure_3d(series, start_year=None, end_year=None, start_age=None, end_age=None, title="", ztitle="", **kwargs):
+def age_figure_3d(series, start_year=None, end_year=None, start_age=None, end_age=None, title="", ztitle="", showscale=False, **kwargs):
   if start_year is None:
     start_year = max(dt.START_YEAR, min(series.index.levels[-1]))
   if end_year is None:

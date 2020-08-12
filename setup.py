@@ -5,7 +5,7 @@ with open("README.md", "r") as file:
 
 setuptools.setup(
   name="dream-tools",
-  version="0.2.3",
+  version="0.3.2",
   author="Martin Kirk Bonde",
   author_email="martin@bonde.dk",
   description="A collection of tools used by the Danish institute for economic modelling and forecasting, DREAM (http://dreammodel.dk).",
@@ -18,5 +18,5 @@ setuptools.setup(
     "License :: OSI Approved :: MIT License",
   ],
   python_requires='>=3.6',
-  install_requires=['gams', "pandas"],
+  install_requires=["pandas"],
 )

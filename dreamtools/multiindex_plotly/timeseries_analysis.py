@@ -2,6 +2,7 @@ import dreamtools as dt
 import numpy as np
 import pandas as pd
 import easygui
+from IPython.display import display
 
 def time(start, end=None):
   """Set global time settings."""
@@ -28,9 +29,19 @@ def aggregate_series(series, default_set_aggregations=None, reference_database=N
   else:
     return series
 
-def prt(iter_series, operator=None, start_year=None, end_year=None, reference_database=None, default_set_aggregations=None, dec=6):
+def prt(iter_series,
+        operator=None,
+        start_year=None,
+        end_year=None,
+        reference_database=None,
+        default_set_aggregations=None,
+        dec=6,
+        max_rows=100,
+        max_columns=20,):
   df = to_dataframe(iter_series, operator, start_year, end_year, reference_database, default_set_aggregations)
-  print(df.round(dec).to_string())
+  df.style.set_properties(**{"text-align": "right", "precision": dec})
+  with pd.option_context('display.max_rows', max_rows, 'display.max_columns', max_columns):  # more options can be specified also
+    display(df)
 
 def plot(iter_series,
          operator=None,
