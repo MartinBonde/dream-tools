@@ -432,6 +432,9 @@ def series_from_parameter(symbol):
 class Gdx(GamsPandasDatabase):
   """Wrapper that opens a GDX file as a GamsPandasDatabase."""
   def __init__(self, file_path, workspace=None):
+    if not file_path:
+      raise ValueError("No file path was provided")
+      return None
     if not os.path.splitext(file_path)[1]:
       file_path = file_path + ".gdx"
     self.abs_path = os.path.abspath(file_path)
@@ -453,6 +456,3 @@ class Gdx(GamsPandasDatabase):
       path = os.path.join(os.path.dirname(self.abs_path), path)
     logger.info(f"Export GDX file to {path}.")
     super().export(path)
-
-
-
