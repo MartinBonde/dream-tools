@@ -20,3 +20,4 @@ from .multiindex_plotly import makro_settings as settings
 DEFAULT_SET_AGGREGATIONS = settings.DEFAULT_SET_AGGREGATIONS
 AGE_AXIS_TITLE = settings.AGE_AXIS_TITLE
 TIME_AXIS_TITLE = settings.TIME_AXIS_TITLE
+YAXIS_TITLE_FROM_OPERATOR = settings.YAXIS_TITLE_FROM_OPERATOR

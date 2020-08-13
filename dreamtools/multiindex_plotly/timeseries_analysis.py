@@ -35,10 +35,11 @@ def prt(iter_series,
         end_year=None,
         reference_database=None,
         default_set_aggregations=None,
+        function=None,
         dec=6,
         max_rows=100,
         max_columns=20,):
-  df = to_dataframe(iter_series, operator, start_year, end_year, reference_database, default_set_aggregations)
+  df = to_dataframe(iter_series, operator, start_year, end_year, reference_database, default_set_aggregations, function)
   df.style.set_properties(**{"text-align": "right", "precision": dec})
   with pd.option_context('display.max_rows', max_rows, 'display.max_columns', max_columns):  # more options can be specified also
     display(df)
@@ -49,25 +50,54 @@ def plot(iter_series,
          end_year=None,
          reference_database=None,
          default_set_aggregations=None,
+         function=None,
+         names=None,
          layout={},
          **kwargs):
-  df = to_dataframe(iter_series, operator, start_year, end_year, reference_database, default_set_aggregations)
+  df = to_dataframe(iter_series, operator, start_year, end_year, reference_database, default_set_aggregations, function)
+  df.columns = names
   fig = df.plot(**kwargs)
-  layout = {"yaxis": {"title": ""}, "xaxis": {"title": dt.TIME_AXIS_TITLE}, **layout}
+  layout = {
+    "yaxis": {"title": dt.YAXIS_TITLE_FROM_OPERATOR.get(operator, "")},
+    "xaxis": {"title": dt.TIME_AXIS_TITLE},
+    "legend": {"title": ""},
+    **layout
+  }
   fig.update_layout(layout)
   return fig
 
-def to_dataframe(iter_series, operator=None, start_year=None, end_year=None, reference_database=None, default_set_aggregations=None):
+def dummy_function(x):
+  return x
+
+def to_dataframe(iter_series,
+                 operator=None,
+                 start_year=None,
+                 end_year=None,
+                 reference_database=None,
+                 default_set_aggregations=None,
+                 function=None):
   if isinstance(iter_series, pd.Series):
     iter_series = [iter_series]
+  if function is None:
+    function = dummy_function
 
-  iter_series = [aggregate_series(s, default_set_aggregations, reference_database) for s in iter_series]
-  iter_series = compare_to_reference(iter_series, operator, reference_database)
+  iter_series = [function(aggregate_series(s, default_set_aggregations, reference_database))
+                 for s in iter_series]
+  if operator:
+    if reference_database is None:
+      reference_database = get_reference_database()
+    dimension_changed = [reference_database[s.name].index.nlevels != s.index.nlevels for s in iter_series]
+    refs = [function(reference_database[s.name].loc[s.index])
+            if not dimension_changed[i]
+            else s * np.NaN
+            for i, s in enumerate(iter_series)]
+    iter_series = compare(iter_series, refs, operator)
 
   if start_year is None:
     start_year = dt.START_YEAR
   if end_year is None:
     end_year = dt.END_YEAR
+
   return merge_multiseries(*iter_series).loc[start_year:end_year]
 
 def get_reference_database():
@@ -75,21 +105,10 @@ def get_reference_database():
     dt.REFERENCE_DATABASE = dt.Gdx(easygui.fileopenbox("Select reference gdx file", filetypes=["*.gdx"]))
   return dt.REFERENCE_DATABASE
 
-def compare_to_reference(iter_series, operator, reference_database=None):
+def compare(iter_series, refs, operator):
   """
-  Applies an operator to each series in iter_series, comparing with the series with same name in the reference_database.
+  Applies an operator to each pair in zip(iter_series, refs)
   """
-  if not operator:
-    return [s.copy() for s in iter_series]
-
-  if reference_database is None:
-    reference_database = get_reference_database()
-
-  dimension_changed = [reference_database[s.name].index.nlevels != s.index.nlevels for s in iter_series]
-  refs = [reference_database[s.name].loc[s.index] if not dimension_changed[i]
-          else s.copy() * np.NaN
-          for i, s in enumerate(iter_series)]
-
   if operator in ["q"]:
     return [s / b - 1 for s, b in zip(iter_series, refs)]
   elif operator in ["m"]:

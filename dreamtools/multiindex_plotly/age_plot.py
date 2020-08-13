@@ -21,7 +21,7 @@ def age_figure_3d(series, start_year=None, end_year=None, start_age=None, end_ag
   age = list(range(start_age, end_age + 1))
   time = list(range(start_year, end_year + 1))
   value = series.loc[age, time].unstack().values
-  surface = go.Surface(x=time, y=age, z=value, **kwargs)
+  surface = go.Surface(x=time, y=age, z=value, showscale=showscale, **kwargs)
   return go.Figure(
     surface,
     layout={

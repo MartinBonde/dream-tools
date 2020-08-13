@@ -31,3 +31,8 @@ DEFAULT_SET_AGGREGATIONS = {
 
 AGE_AXIS_TITLE = "Alder"
 TIME_AXIS_TITLE = "År"
+
+YAXIS_TITLE_FROM_OPERATOR = {
+	"q": "Relativ ændring ifht. grundforløb",
+	"m": "Forskel fra grundfoløb",
+}
