@@ -33,6 +33,15 @@ AGE_AXIS_TITLE = "Alder"
 TIME_AXIS_TITLE = "År"
 
 YAXIS_TITLE_FROM_OPERATOR = {
-	"q": "Relativ ændring ifht. grundforløb",
+	"pq": "Pct.-ændringer relativt til grundforløb",
+	"q": "Ændring relativt til grundforløb",
 	"m": "Forskel fra grundfoløb",
 }
+
+
+# import plotly.graph_objects as go
+# import plotly.io as pio
+
+# pio.templates["MAKRO"] = go.layout.Template(
+# )
+# pio.templates.default = "plotly+draft"

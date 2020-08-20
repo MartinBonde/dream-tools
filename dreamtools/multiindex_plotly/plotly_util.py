@@ -17,12 +17,13 @@ def figures_to_html(figs, filename="figures.html"):
   file.write("</body></html>" + "\n")
 
 
-def subplot(figures, cols=2):
+def subplot(figures, cols=2, **kwargs):
   """Create subplot from iter of figures."""
   rows = ceil(len(figures) / cols)
   fig = make_subplots(rows=rows,
                       cols=cols,
                       subplot_titles=[f["layout"]["title"]["text"] for f in figures],
+                      **kwargs
                       )
   for i, f in enumerate(figures):
     for trace in f["data"]:

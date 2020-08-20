@@ -11,6 +11,9 @@ def time(start, end=None):
   dt.START_YEAR = start
   dt.END_YEAR = end
 
+def years():
+  return list(range(dt.START_YEAR, dt.END_YEAR+1))
+
 def aggregate_index(index, default_set_aggregations):
   if index.nlevels > 1:
     return tuple(default_set_aggregations.get(k, list(index.levels[i])) for i, k in enumerate(index.names))
@@ -24,10 +27,14 @@ def aggregate_series(series, default_set_aggregations=None, reference_database=N
   if reference_database is None:
     reference_database = get_reference_database()
 
-  if len(reference_database[series.name].index) == len(series.index):
-    return series.loc[aggregate_index(series.index, default_set_aggregations)]
-  else:
-    return series
+  if series.name in reference_database:
+    if len(reference_database[series.name].index) == len(series.index):
+      return series.loc[aggregate_index(series.index, default_set_aggregations)]
+  elif series.index.name in reference_database:
+    if len(reference_database[series.index.name]) == len(series.index):
+      return series.loc[aggregate_index(series.index, default_set_aggregations)]
+
+  return series
 
 def prt(iter_series,
         operator=None,
@@ -55,7 +62,8 @@ def plot(iter_series,
          layout={},
          **kwargs):
   df = to_dataframe(iter_series, operator, start_year, end_year, reference_database, default_set_aggregations, function)
-  df.columns = names
+  if names:
+    df.columns = names
   fig = df.plot(**kwargs)
   layout = {
     "yaxis": {"title": dt.YAXIS_TITLE_FROM_OPERATOR.get(operator, "")},
@@ -86,7 +94,15 @@ def to_dataframe(iter_series,
   if operator:
     if reference_database is None:
       reference_database = get_reference_database()
-    dimension_changed = [reference_database[s.name].index.nlevels != s.index.nlevels for s in iter_series]
+    dimension_changed = []
+    for s in iter_series:
+      if s.name in reference_database:
+        is_changed = reference_database[s.name].index.nlevels != s.index.nlevels
+        dimension_changed.append(is_changed)
+        if is_changed:
+          Warning(f"The dimension of '{s.name}' is different in the reference database. If indexing a single element write [['element']] rather than ['element'] to prevent the series dimension being reduced.")
+      else:
+        Warning(f"'{s.name}' was not found in the reference database.")
     refs = [function(reference_database[s.name].loc[s.index])
             if not dimension_changed[i]
             else s * np.NaN
@@ -111,6 +127,8 @@ def compare(iter_series, refs, operator):
   """
   if operator in ["q"]:
     return [s / b - 1 for s, b in zip(iter_series, refs)]
+  elif operator in ["pq"]:
+    return [(s / b - 1)*100 for s, b in zip(iter_series, refs)]
   elif operator in ["m"]:
     return [s - b for s, b in zip(iter_series, refs)]
   elif operator in ["s"]:
@@ -148,7 +166,12 @@ def merge_multiseries(*series, keep_axis_index=-1):
   for s in series:
     df = unstack_multiseries(s, keep_axis_index)
     for c in df.columns:
-      output[c] = df[c]
+      new_name = c if (c != "0") else ""
+      iter = 0
+      while new_name in output:
+        iter += 1
+        new_name = f"{c}{iter}"
+      output[new_name] = df[c]
   return output
 
 

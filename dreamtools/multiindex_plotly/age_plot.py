@@ -8,7 +8,15 @@ import pandas as pd
 # def age_plot_2d(iter_series, operator=None, years=None, start_age=None, end_age=None, title="", reference_database=None):
 #   age_figure_2d(iter_series, operator, years, start_age, end_age, title, reference_database).show()
 
-def age_figure_3d(series, start_year=None, end_year=None, start_age=None, end_age=None, title="", ztitle="", showscale=False, **kwargs):
+def age_figure_3d(series,
+                  start_year=None,
+                  end_year=None,
+                  start_age=None,
+                  end_age=None,
+                  title="",
+                  ztitle="",
+                  showscale=False,
+                  **kwargs):
   if start_year is None:
     start_year = max(dt.START_YEAR, min(series.index.levels[-1]))
   if end_year is None:
@@ -43,7 +51,6 @@ def age_figure_2d(iter_series,
                   ):
   if isinstance(iter_series, pd.Series):
     iter_series = [iter_series]
-  iter_series = dt.compare_to_reference(iter_series, operator, reference_database)
   if years is None:
     years = list(range(dt.START_YEAR, dt.END_YEAR+1))
     if max(len(s.loc[:,years].index.unique(level=-1)) for s in iter_series) > 5:
@@ -52,9 +59,15 @@ def age_figure_2d(iter_series,
     start_age = dt.START_AGE
   if end_age is None:
     end_age = dt.END_AGE
+  iter_series = [series.sort_index().loc[start_age:end_age, years] for series in iter_series]
+  if operator:
+    if reference_database is None:
+      reference_database = dt.get_reference_database()
+    refs = [reference_database[series.name].sort_index().loc[series.index] for series in iter_series]
+    iter_series = dt.compare(iter_series, refs, operator)
   df = pd.DataFrame()
   for series in iter_series:
-    series_df = series.sort_index().loc[start_age:end_age, years].unstack()
+    series_df = series.unstack()
     for col in series_df:
       df[f"{series.name}[{col}]"] = series_df[col]
   return df.plot(**kwargs)
