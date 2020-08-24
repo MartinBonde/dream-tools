@@ -13,8 +13,10 @@ from copy import deepcopy
 
 logger = logging.getLogger(__name__)
 
+
 def is_iterable(arg):
   return isinstance(arg, Iterable) and not isinstance(arg, string_types)
+
 
 def map_lowest_level(func, x):
   """Map lowest level of zero or more nested lists."""
@@ -23,7 +25,9 @@ def map_lowest_level(func, x):
   else:
     return func(x)
 
+
 def try_to_int(x):
+  """Cast input to int if possible, else return input unchanged."""
   try:
     if str(int(x)) == str(x):
       return int(x)
@@ -31,6 +35,7 @@ def try_to_int(x):
       return x
   except ValueError:
     return x
+
 
 def map_to_int_where_possible(iter):
   """Returns an iterable where each element is converted to an integer if possible for that element."""
@@ -43,6 +48,7 @@ class GamsPandasDatabase:
   When as symbol is first retrieved it is converted to a Pandas series and stored in self.series
   Changes to retrieved series are written to the GAMS database on export.
   """
+
   def __init__(self, database=None, workspace=None):
     if database is None:
       if workspace is None:
@@ -76,7 +82,8 @@ class GamsPandasDatabase:
 
     for name in other.sets:
       if name in symbol_names:
-        db.add_set_from_series(other[name].texts, other[name].explanatory_text)
+        series = other[name].texts
+        db.create_set(series.name, series.index, other[name].explanatory_text, series)
 
     for name in other.variables:
       if name in symbol_names:
@@ -122,9 +129,19 @@ class GamsPandasDatabase:
     """Retrieve any nymber of symbol names and return a list of their Pandas representations."""
     return [self[i] for i in args]
 
-  def add_set_from_series(self, series, explanatory_text=""):
-    """Add set symbol to database based on a Pandas series."""
-    self.create_set(series.name, series.index, explanatory_text, texts=series)
+  def add_parameter_from_dataframe(self, identifier, df, explanatory_text="", add_missing_domains=False,
+                                   value_column_index=-1):
+    """Add parameter symbol to database based on a Pandas DataFrame."""
+    domains = list(df.columns[:value_column_index:])
+    for d in domains:
+      if d not in self:
+        if add_missing_domains:
+          self.create_set(name=d, index=df[d].unique(), explanatory_text="")
+        else:
+          raise KeyError(
+            f"'{d}' is not a set in the database. Enable add_missing_domains or add the set to the database manually.")
+    self.database.add_parameter_dc(identifier, domains, explanatory_text)
+    self.series[identifier] = df.set_index(domains).iloc[:, 0]
 
   def add_parameter_from_series(self, series, explanatory_text="", add_missing_domains=False):
     """Add parameter symbol to database based on a Pandas series."""
@@ -134,16 +151,18 @@ class GamsPandasDatabase:
       df = series.reset_index()
     self.add_parameter_from_dataframe(series.name, df, explanatory_text, add_missing_domains)
 
-  def add_parameter_from_dataframe(self, identifier, df, explanatory_text="", add_missing_domains=False, value_column_index=-1):
-    """Add parameter symbol to database based on a Pandas DataFrame."""
+  def add_variable_from_dataframe(self, identifier, df, explanatory_text="", add_missing_domains=False,
+                                  value_column_index=-1):
+    """Add variable symbol to database based on a Pandas DataFrame."""
     domains = list(df.columns[:value_column_index:])
     for d in domains:
       if d not in self:
         if add_missing_domains:
-          self.add_set_from_series(df[d])
+          self.create_set(name=d, index=df[d].unique(), explanatory_text="")
         else:
-          raise KeyError(f"'{d}' is not a set in the database. Enable add_missing_domains or add the set to the database manually.")
-    self.database.add_parameter_dc(identifier, domains, explanatory_text)
+          raise KeyError(
+            f"'{d}' is not a set in the database. Enable add_missing_domains or add the set to the database manually.")
+    self.database.add_variable_dc(identifier, gams.VarType.Free, domains, explanatory_text)
     self.series[identifier] = df.set_index(domains).iloc[:, 0]
 
   def add_variable_from_series(self, series, explanatory_text="", add_missing_domains=False):
@@ -211,55 +230,31 @@ class GamsPandasDatabase:
     self.series[index.name] = index
     return self[name]
 
-  def create_variable(self, name, index=None, explanatory_text="", data=None, dtype=None, copy=False, add_missing_domains=False):
+  def create_variable_or_parameter(self, symbol_type, name, index, explanatory_text, data, dtype, copy, add_missing_domains):
     if index is not None:
       series = pd.Series(data, self.get_index(index), dtype, name, copy)
       series.explanatory_text = explanatory_text
-      self.add_variable_from_series(series, explanatory_text, add_missing_domains)
+      getattr(self, f"add_{symbol_type}_from_series")(series, explanatory_text, add_missing_domains)
     elif isinstance(data, pd.DataFrame):
-      self.add_variable_from_dataframe(name, data, explanatory_text, add_missing_domains)
+      getattr(self, f"add_{symbol_type}_from_dataframe")(name, data, explanatory_text, add_missing_domains)
     elif isinstance(data, pd.Series):
-      self.add_variable_from_series(data, explanatory_text, add_missing_domains)
+      getattr(self, f"add_{symbol_type}_from_series")(data, explanatory_text, add_missing_domains)
     else:
       if is_iterable(data) and len(data) and is_iterable(data[0]):
         self.database.add_variable(name, len(data[0]), gams.VarType.Free, explanatory_text)
+        self[name] = data
       elif is_iterable(data):
-        self.database.add_variable(name, 1, gams.VarType.Free, explanatory_text)
+        getattr(self, f"add_{symbol_type}_from_dataframe")(name, pd.DataFrame(data), explanatory_text, add_missing_domains)
       else:
         self.database.add_variable(name, 0, gams.VarType.Free, explanatory_text)
-      self[name] = data
+        self[name] = data
     return self[name]
+
+  def create_variable(self, name, index=None, explanatory_text="", data=None, dtype=None, copy=False, add_missing_domains=False):
+    return self.create_variable_or_parameter("variable", name, index, explanatory_text, data, dtype, copy, add_missing_domains)
 
   def create_parameter(self, name, index=None, explanatory_text="", data=None, dtype=None, copy=False, add_missing_domains=False):
-    if index is not None:
-      series = pd.Series(data, self.get_index(index), dtype, name, copy)
-      series.explanatory_text = explanatory_text
-      self.add_parameter_from_series(series, explanatory_text, add_missing_domains)
-    elif isinstance(data, pd.DataFrame):
-      self.add_parameter_from_dataframe(name, data, explanatory_text, add_missing_domains)
-    elif isinstance(data, pd.Series):
-      self.add_parameter_from_series(data, explanatory_text, add_missing_domains)
-    else:
-      if is_iterable(data) and len(data) and is_iterable(data[0]):
-        self.database.add_parameter(name, len(data[0]), explanatory_text)
-      elif is_iterable(data):
-        self.database.add_parameter(name, 1, explanatory_text)
-      else:
-        self.database.add_parameter(name, 0, explanatory_text)
-      self[name] = data
-    return self[name]
-
-  def add_variable_from_dataframe(self, identifier, df, explanatory_text="", add_missing_domains=False, value_column_index=-1):
-    """Add variable symbol to database based on a Pandas DataFrame."""
-    domains = list(df.columns[:value_column_index:])
-    for d in domains:
-      if d not in self:
-        if add_missing_domains:
-          self.add_set_from_series(df[d])
-        else:
-          raise KeyError(f"'{d}' is not a set in the database. Enable add_missing_domains or add the set to the database manually.")
-    self.database.add_variable_dc(identifier, gams.VarType.Free, domains, explanatory_text)
-    self.series[identifier] = df.set_index(domains).iloc[:, 0]
+    return self.create_variable_or_parameter("parameter", name, index, explanatory_text, data, dtype, copy, add_missing_domains)
 
   @staticmethod
   @np.vectorize
@@ -350,12 +345,14 @@ def merge_symbol_records(series, symbol):
   for k, v in series.items():
     setattr(symbol.merge_record(k), attr, v)
 
+
 def set_symbol_records(symbol, value):
   """Convert Pandas series to records in a GAMS Symbol"""
   if isinstance(symbol, gams.GamsSet):
     if isinstance(value, pd.Index):
       texts = getattr(value, "texts", None)
       value = texts if texts is not None else pd.Series(map(str, value), index=value)
+
     def add_record(symbol, k, v):
       if not all_na(v):
         symbol.add_record(k).text = str(v)
@@ -379,12 +376,14 @@ def set_symbol_records(symbol, value):
     for k, v in value.items():
       add_record(symbol, map_lowest_level(str, k), v)
 
+
 def all_na(x):
   """Returns bool of whether a series or scalar consists of all NAs"""
   if is_iterable(x):
     return all(pd.isna(x))
   else:
     return pd.isna(x)
+
 
 def index_names_from_symbol(symbol):
   """
@@ -400,6 +399,7 @@ def index_names_from_symbol(symbol):
       if name == "*":
         index_names[i] = f"index_{i}"
   return index_names
+
 
 def index_from_symbol(symbol):
   """Return a Pandas Index based on the records and domain names of a GAMS symbol."""
@@ -418,19 +418,24 @@ def index_from_symbol(symbol):
     index.texts = pd.Series([rec.text for rec in symbol], index, name=symbol.name)
   return index
 
+
 def symbol_is_scalar(symbol):
   return not symbol.domains_as_strings
+
 
 def series_from_variable(symbol, attr="level"):
   """Get a variable symbol from the GAMS database and return an equivalent Pandas series."""
   return pd.Series([getattr(rec, attr) for rec in symbol], index_from_symbol(symbol), name=symbol.name)
 
+
 def series_from_parameter(symbol):
   """Get a parameter symbol from the GAMS database and return an equivalent Pandas series."""
   return pd.Series([rec.value for rec in symbol], index_from_symbol(symbol), name=symbol.name)
 
+
 class Gdx(GamsPandasDatabase):
   """Wrapper that opens a GDX file as a GamsPandasDatabase."""
+
   def __init__(self, file_path, workspace=None):
     if not file_path:
       raise ValueError("No file path was provided")

@@ -1,4 +1,6 @@
 import os
+import sys
+sys.path.insert(0, os.getcwd())
 
 import numpy as np
 import pandas as pd
@@ -17,7 +19,6 @@ def test_gdx_read():
   assert approximately_equal(gdx["qI_s"]["IB", "fre", 2010], 4.43)  # "IB" should be changed to "iB" in the GDX file.
   assert approximately_equal(gdx["eCx"], 1)
   assert gdx["s"].name == "s_"
-
 
 def test_create_set_from_index():
   db = GamsPandasDatabase()
@@ -42,36 +43,6 @@ def test_create_set_from_index():
   assert db.symbols["st"].domains_as_strings == ["s", "t"]
   assert db.st.domains == ["s", "t"]
 
-
-def test_add_set_from_series():
-  db = GamsPandasDatabase()
-  t = pd.Index(range(2010, 2026), name="t")
-  t = pd.Series([f"Year {i}" for i in t], index=t, name="t")
-  db.add_set_from_series(t)
-  assert db["t"].name == "t"
-  assert all(db["t"].texts == t)
-  assert all(db["t"] == t.index)
-  assert db.symbols["t"].domains_as_strings == ["*"]
-
-  tsub = t[5:]
-  tsub.name = "tsub"
-  db.add_set_from_series(tsub)
-  assert db["tsub"].name == "tsub"
-  assert all(db["tsub"].texts == tsub)
-  assert all(db["tsub"] == tsub.index)
-  assert db.symbols["tsub"].domains_as_strings == ["t"]
-  assert db.tsub.domains == ["t"]
-
-  s = pd.Index(["services", "goods"], name="s")
-  st = pd.MultiIndex.from_product([s, t], names=["s", "t"])
-  st = pd.Series([str(i) for i in st], index=st, name="st")
-  db.add_set_from_series(st)
-  assert db["st"].name == "st"
-  assert all(db["st"].texts == st)
-  assert all(db["st"] == st.index)
-  assert db.symbols["st"].domains_as_strings == ["s", "t"]
-
-
 def test_add_parameter_from_dataframe():
   db = GamsPandasDatabase()
   df = pd.DataFrame()
@@ -80,7 +51,6 @@ def test_add_parameter_from_dataframe():
   db.add_parameter_from_dataframe("par", df, add_missing_domains=True)
   assert all(db["par"] == 1.3)
   assert len(db["par"]) == 16
-
 
 def test_multiply_added():
   db = GamsPandasDatabase()
@@ -104,7 +74,6 @@ def test_multiply_added():
 
   assert db["v"][2020, "goo"] == 4.8
 
-
 def test_add_parameter_from_series():
   db = GamsPandasDatabase()
   t = pd.Index(range(2010, 2026), name="t")
@@ -116,10 +85,22 @@ def test_add_parameter_from_series():
 def test_create_variable():
   db = GamsPandasDatabase()
   db.create_variable("scalar", data=1)
-  db.create_variable("vector", data=[1, 2])
+  db.create_variable("vector", data=[1, 2], index=pd.Index(["a", "b"], name="ab"), add_missing_domains=True)
+
+  db.create_variable("dataframe",
+                     data=pd.DataFrame([
+                       [2010, "ser", 3],
+                       [2010, "goo", 2],
+                       [2020, "ser", 6],
+                       [2020, "goo", 4],
+                     ], columns=["t", "s", "value"]),
+                     add_missing_domains=True
+                     )
   db.export("test_export.gdx")
   assert Gdx("test_export.gdx")["scalar"] == 1
   assert all(Gdx("test_export.gdx")["vector"] == [1, 2])
+  assert all(db.s == ["ser", "goo"])
+  assert all(db.t == [2010, 2020])
 
 def test_add_variable_from_series():
   db = GamsPandasDatabase()
@@ -138,7 +119,8 @@ def test_add_variable_from_dataframe():
     [2020, "goo", 4],
   ], columns=["t", "s", "value"])
   db.add_variable_from_dataframe("q", df, add_missing_domains=True)
-
+  assert all(db.t == [2010, 2020])
+  assert all(db.s == ["ser", "goo"])
 
 def test_multiply_with_different_sets():
   assert approximately_equal(
@@ -146,11 +128,9 @@ def test_multiply_with_different_sets():
     50730260150
   )
 
-
 def test_export_with_no_changes():
   Gdx("test.gdx").export("test_export.gdx", relative_path=True)
   assert round(os.stat("test.gdx").st_size, -5) == round(os.stat("test_export.gdx").st_size, -5)
-
 
 def test_export_variable_with_changes():
   gdx = Gdx("test.gdx")
@@ -158,7 +138,6 @@ def test_export_variable_with_changes():
   gdx.export("test_export.gdx", relative_path=True)
   old, new = Gdx("test.gdx"), Gdx("test_export.gdx")
   assert all(old["qY"] * 2 == new["qY"])
-
 
 def test_export_scalar_with_changes():
   gdx = Gdx("test.gdx")
@@ -168,13 +147,11 @@ def test_export_scalar_with_changes():
   old, new = Gdx("test.gdx"), Gdx("test_export.gdx")
   assert approximately_equal(old["eCx"] * 2, new["eCx"])
 
-
 def test_export_set_with_changes():
   gdx = Gdx("test.gdx")
   gdx["s"].texts["tje"] = "New text"
   gdx.export("test_export.gdx", relative_path=True)
   assert Gdx("test_export.gdx")["s"].texts["tje"] == "New text"
-
 
 def test_copy_set():
   gdx = Gdx("test.gdx")
@@ -188,7 +165,6 @@ def test_copy_set():
   gdx.series[index.name] = index
   gdx.export("test_export.gdx", relative_path=True)
   assert all(Gdx("test_export.gdx")["alias"] == gdx["s"])
-
 
 def test_export_added_variable():
   gdx = Gdx("test.gdx")
@@ -216,7 +192,6 @@ def test_detuple():
   assert list(GamsPandasDatabase.detuple(("aaa", "bbb"))) == ["aaa", "bbb"]
   assert GamsPandasDatabase.detuple(1) == 1
   assert list(GamsPandasDatabase.detuple([1, 2])) == [1, 2]
-
 
 def test_create_methods():
   # Create empty GamsPandasDatabase and alias creation methods
