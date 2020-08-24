@@ -66,9 +66,9 @@ def plot(iter_series,
     df.columns = names
   fig = df.plot(**kwargs)
   layout = {
-    "yaxis": {"title": dt.YAXIS_TITLE_FROM_OPERATOR.get(operator, "")},
-    "xaxis": {"title": dt.TIME_AXIS_TITLE},
-    "legend": {"title": ""},
+    "yaxis_title_text": dt.YAXIS_TITLE_FROM_OPERATOR.get(operator, ""),
+    "xaxis_title_text": dt.TIME_AXIS_TITLE,
+    "legend_title_text": "",
     **layout
   }
   fig.update_layout(layout)
@@ -94,17 +94,8 @@ def to_dataframe(iter_series,
   if operator:
     if reference_database is None:
       reference_database = get_reference_database()
-    dimension_changed = []
-    for s in iter_series:
-      if s.name in reference_database:
-        is_changed = reference_database[s.name].index.nlevels != s.index.nlevels
-        dimension_changed.append(is_changed)
-        if is_changed:
-          Warning(f"The dimension of '{s.name}' is different in the reference database. If indexing a single element write [['element']] rather than ['element'] to prevent the series dimension being reduced.")
-      else:
-        Warning(f"'{s.name}' was not found in the reference database.")
-    refs = [function(reference_database[s.name].loc[s.index])
-            if not dimension_changed[i]
+    refs = [function((s - s + reference_database[s.name])[s.index])
+            if not dimension_changed(s, reference_database)
             else s * np.NaN
             for i, s in enumerate(iter_series)]
     iter_series = compare(iter_series, refs, operator)
@@ -115,6 +106,18 @@ def to_dataframe(iter_series,
     end_year = dt.END_YEAR
 
   return merge_multiseries(*iter_series).loc[start_year:end_year]
+
+def dimension_changed(series, reference_database):
+  if series.name in reference_database:
+    is_changed = reference_database[series.name].index.nlevels != series.index.nlevels
+    if is_changed:
+      Warning(
+        f"The dimension of '{series.name}' is different in the reference database. If indexing a single element write [['element']] rather than ['element'] to prevent the series dimension being reduced.")
+    return is_changed
+  else:
+    Warning(f"'{series.name}' was not found in the reference database.")
+    return True
+
 
 def get_reference_database():
   if dt.REFERENCE_DATABASE is None:

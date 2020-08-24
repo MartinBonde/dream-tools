@@ -47,6 +47,7 @@ def age_figure_2d(iter_series,
                   years=None,
                   start_age=None, end_age=None,
                   reference_database=None,
+                  names=None,
                   **kwargs
                   ):
   if isinstance(iter_series, pd.Series):
@@ -65,9 +66,20 @@ def age_figure_2d(iter_series,
       reference_database = dt.get_reference_database()
     refs = [reference_database[series.name].sort_index().loc[series.index] for series in iter_series]
     iter_series = dt.compare(iter_series, refs, operator)
+  if names is not None:
+    for name, series in zip(names, iter_series):
+      series.name = name
   df = pd.DataFrame()
   for series in iter_series:
     series_df = series.unstack()
-    for col in series_df:
-      df[f"{series.name}[{col}]"] = series_df[col]
-  return df.plot(**kwargs)
+    if len(series_df.columns) == 1:
+      df[f"{series.name}"] = series_df[series_df.columns[0]]
+    else:
+      for col in series_df:
+        df[f"{series.name}[{col}]"] = series_df[col]
+  return df.plot().update_layout(**{
+    "xaxis_title_text": dt.AGE_AXIS_TITLE,
+    "yaxis_title_text": dt.YAXIS_TITLE_FROM_OPERATOR.get(operator, ""),
+    "legend_title": "",
+    **kwargs
+  })
