@@ -2,6 +2,8 @@
 """
 import os
 from collections.abc import Iterable
+
+import easygui
 from six import string_types
 
 import numpy as np
@@ -185,15 +187,6 @@ class GamsPandasDatabase:
     else:
       return pd.Index(x)
 
-  def get_domains_from_index(self, index, name):
-    if hasattr(index, "domains"):
-      domains = index.domains
-    elif hasattr(index, "name"):
-      domains = index.names
-    else:
-      domains = [index.name]
-    return ["*" if i in (None, name) else i for i in domains]
-
   def create_set(self, name, index, explanatory_text="", texts=None, domains=None):
     """
     Add a new GAMS Set to the database and return an Pandas representation of the Set.
@@ -241,20 +234,37 @@ class GamsPandasDatabase:
       getattr(self, f"add_{symbol_type}_from_series")(data, explanatory_text, add_missing_domains)
     else:
       if is_iterable(data) and len(data) and is_iterable(data[0]):
-        self.database.add_variable(name, len(data[0]), gams.VarType.Free, explanatory_text)
-        self[name] = data
+        self.add_variable_or_parameter_to_database(symbol_type, name, len(data[0]), explanatory_text)
       elif is_iterable(data):
         getattr(self, f"add_{symbol_type}_from_dataframe")(name, pd.DataFrame(data), explanatory_text, add_missing_domains)
       else:
-        self.database.add_variable(name, 0, gams.VarType.Free, explanatory_text)
+        self.add_variable_or_parameter_to_database(symbol_type, name, 0, explanatory_text)
         self[name] = data
     return self[name]
+
+  def add_variable_or_parameter_to_database(self, symbol_type, name, data, explanatory_text):
+    assert symbol_type in ["parameter", "variable"]
+    if symbol_type == "parameter":
+      self.database.add_parameter(name, data, explanatory_text)
+    elif symbol_type == "variable":
+      self.database.add_variable(name, data, gams.VarType.Free, explanatory_text)
+    self[name] = data
 
   def create_variable(self, name, index=None, explanatory_text="", data=None, dtype=None, copy=False, add_missing_domains=False):
     return self.create_variable_or_parameter("variable", name, index, explanatory_text, data, dtype, copy, add_missing_domains)
 
   def create_parameter(self, name, index=None, explanatory_text="", data=None, dtype=None, copy=False, add_missing_domains=False):
     return self.create_variable_or_parameter("parameter", name, index, explanatory_text, data, dtype, copy, add_missing_domains)
+
+  @staticmethod
+  def get_domains_from_index(index, name):
+    if hasattr(index, "domains"):
+      domains = index.domains
+    elif hasattr(index, "name"):
+      domains = index.names
+    else:
+      domains = [index.name]
+    return ["*" if i in (None, name) else i for i in domains]
 
   @staticmethod
   @np.vectorize
@@ -438,8 +448,10 @@ class Gdx(GamsPandasDatabase):
 
   def __init__(self, file_path, workspace=None):
     if not file_path:
-      raise ValueError("No file path was provided")
-      return None
+      file_path = easygui.fileopenbox("Select reference gdx file", filetypes=["*.gdx"])
+      if not file_path:
+        raise ValueError("No file path was provided")
+        return None
     if not os.path.splitext(file_path)[1]:
       file_path = file_path + ".gdx"
     self.abs_path = os.path.abspath(file_path)
