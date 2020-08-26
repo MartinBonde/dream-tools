@@ -473,3 +473,6 @@ class Gdx(GamsPandasDatabase):
       path = os.path.join(os.path.dirname(self.abs_path), path)
     logger.info(f"Export GDX file to {path}.")
     super().export(path)
+
+  def __repr__(self):
+    return f"dreamtools.gams_pandas.gams_pandas.Gdx from {self.abs_path}"

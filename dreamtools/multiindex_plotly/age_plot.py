@@ -60,7 +60,7 @@ def age_figure_2d(iter_series,
     start_age = dt.START_AGE
   if end_age is None:
     end_age = dt.END_AGE
-  iter_series = [series.sort_index().loc[start_age:end_age, years] for series in iter_series]
+  iter_series = [series.sort_index().loc[range(start_age,end_age+1), years] for series in iter_series]
   if operator:
     if reference_database is None:
       reference_database = dt.get_reference_database()
