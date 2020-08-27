@@ -3,7 +3,6 @@
 import os
 from collections.abc import Iterable
 
-import easygui
 from six import string_types
 
 import numpy as np
@@ -448,6 +447,7 @@ class Gdx(GamsPandasDatabase):
 
   def __init__(self, file_path, workspace=None):
     if not file_path:
+      import easygui
       file_path = easygui.fileopenbox("Select reference gdx file", filetypes=["*.gdx"])
       if not file_path:
         raise ValueError("No file path was provided")

@@ -2,12 +2,6 @@ import plotly.graph_objects as go
 import dreamtools as dt
 import pandas as pd
 
-# def age_plot_3d(series, start_year=None, end_year=None, start_age=None, end_age=None, title="", ztitle="", **kwargs):
-#   age_figure_3d(series, start_year, end_year, start_age, end_age, title, ztitle).show()
-#
-# def age_plot_2d(iter_series, operator=None, years=None, start_age=None, end_age=None, title="", reference_database=None):
-#   age_figure_2d(iter_series, operator, years, start_age, end_age, title, reference_database).show()
-
 def age_figure_3d(series,
                   start_year=None,
                   end_year=None,
@@ -42,12 +36,16 @@ def age_figure_3d(series,
     },
   )
 
+def dummy_function(x):
+  return x
+
 def age_figure_2d(iter_series,
                   operator=None,
                   years=None,
                   start_age=None, end_age=None,
                   reference_database=None,
                   names=None,
+                  function=dummy_function,
                   **kwargs
                   ):
   if isinstance(iter_series, pd.Series):
@@ -60,11 +58,11 @@ def age_figure_2d(iter_series,
     start_age = dt.START_AGE
   if end_age is None:
     end_age = dt.END_AGE
-  iter_series = [series.sort_index().loc[range(start_age,end_age+1), years] for series in iter_series]
+  iter_series = [function(series.sort_index().loc[range(start_age,end_age+1), years]) for series in iter_series]
   if operator:
     if reference_database is None:
       reference_database = dt.get_reference_database()
-    refs = [reference_database[series.name].sort_index().loc[series.index] for series in iter_series]
+    refs = [function(reference_database[series.name].sort_index().loc[series.index]) for series in iter_series]
     iter_series = dt.compare(iter_series, refs, operator)
   if names is not None:
     for name, series in zip(names, iter_series):

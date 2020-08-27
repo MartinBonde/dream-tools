@@ -83,11 +83,9 @@ def to_dataframe(iter_series,
                  end_year=None,
                  reference_database=None,
                  default_set_aggregations=None,
-                 function=None):
+                 function=dummy_function):
   if isinstance(iter_series, pd.Series):
     iter_series = [iter_series]
-  if function is None:
-    function = dummy_function
 
   iter_series = [function(aggregate_series(s, default_set_aggregations, reference_database))
                  for s in iter_series]
