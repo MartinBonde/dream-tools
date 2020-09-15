@@ -18,10 +18,10 @@ DEFAULT_SET_AGGREGATIONS = {
 	"r" : ['tje', 'fre', 'byg', 'soe', 'bol', 'lan', 'ene', 'udv', 'off'],
 
 	"i_": ['iTot',],
-	"i" : ['im', 'ib', 'iL'],
+	"i" : ['iM', 'iB', 'iL'],
 
-	"k_": ['im', 'ib'],
-	"k" : ['im', 'ib'],
+	"k_": ['iM', 'iB'],
+	"k" : ['iM', 'iB'],
 
   "portf": ['Net',],
   "portf_": ['Net',],
