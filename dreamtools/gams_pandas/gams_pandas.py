@@ -50,12 +50,13 @@ class GamsPandasDatabase:
   Changes to retrieved series are written to the GAMS database on export.
   """
 
-  def __init__(self, database=None, workspace=None):
+  def __init__(self, database=None, workspace=None, auto_sort_index=True):
     if database is None:
       if workspace is None:
         workspace = gams.GamsWorkspace()
       database = workspace.add_database()
     self.database = database
+    self.auto_sort_index = auto_sort_index
     self.series = {}
 
   def __getattr__(self, item):
@@ -290,12 +291,16 @@ class GamsPandasDatabase:
           self.series[item] = symbol.find_record().level if len(symbol) else None
         else:
           self.series[item] = series_from_variable(symbol)
+          if self.auto_sort_index:
+            self.series[item] = self.series[item].sort_index()
 
       elif isinstance(symbol, gams.GamsParameter):
         if symbol_is_scalar(symbol):
           self.series[item] = symbol.find_record().value if len(symbol) else None
         else:
           self.series[item] = series_from_parameter(symbol)
+          if self.auto_sort_index:
+            self.series[item] = self.series[item].sort_index()
 
       elif isinstance(symbol, gams.GamsEquation):
         return symbol
@@ -451,7 +456,6 @@ class Gdx(GamsPandasDatabase):
       file_path = easygui.fileopenbox("Select reference gdx file", filetypes=["*.gdx"])
       if not file_path:
         raise ValueError("No file path was provided")
-        return None
     if not os.path.splitext(file_path)[1]:
       file_path = file_path + ".gdx"
     self.abs_path = os.path.abspath(file_path)

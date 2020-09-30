@@ -1,7 +1,6 @@
 import dreamtools as dt
 import numpy as np
 import pandas as pd
-import easygui
 from IPython.display import display
 
 def time(start, end=None):
@@ -119,6 +118,7 @@ def dimension_changed(series, reference_database):
 
 def get_reference_database():
   if dt.REFERENCE_DATABASE is None:
+    import easygui
     dt.REFERENCE_DATABASE = dt.Gdx(easygui.fileopenbox("Select reference gdx file", filetypes=["*.gdx"]))
   return dt.REFERENCE_DATABASE
 
