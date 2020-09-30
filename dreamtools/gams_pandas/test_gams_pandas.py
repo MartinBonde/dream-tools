@@ -76,11 +76,23 @@ def test_multiply_added():
 
 def test_add_parameter_from_series():
   db = GamsPandasDatabase()
+
   t = pd.Index(range(2010, 2026), name="t")
   par = pd.Series(1.4, index=t, name="par")
   db.add_parameter_from_series(par, add_missing_domains=True)
   assert all(db["par"] == 1.4)
   assert len(db["par"]) == 16
+
+  ss = pd.Index(["foo"], name="ss")
+  singleton = pd.Series(1.4, index=ss, name="singleton")
+  db.add_parameter_from_series(singleton, add_missing_domains=True)
+  assert db["singleton"]["foo"] == 1.4
+  assert len(db["singleton"]) == 1
+
+  scalar = pd.Series(1.4, name="scalar")
+  db.add_parameter_from_series(scalar)
+  assert all(db["scalar"] == 1.4)
+  assert len(db["scalar"]) == 1
 
 def test_create_variable():
   db = GamsPandasDatabase()

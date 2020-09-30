@@ -143,11 +143,15 @@ class GamsPandasDatabase:
           raise KeyError(
             f"'{d}' is not a set in the database. Enable add_missing_domains or add the set to the database manually.")
     self.database.add_parameter_dc(identifier, domains, explanatory_text)
-    self.series[identifier] = df.set_index(domains).iloc[:, 0]
+    if domains:
+      series = df.set_index(domains).iloc[:, 0]
+    else:
+      series = df[df.columns[0]]
+    self.series[identifier] = series
 
   def add_parameter_from_series(self, series, explanatory_text="", add_missing_domains=False):
     """Add parameter symbol to database based on a Pandas series."""
-    if len(series) == 1:
+    if len(series) == 1 and series.index.name in [None, "*"]:
       df = pd.DataFrame(series)
     else:
       df = series.reset_index()
@@ -165,11 +169,15 @@ class GamsPandasDatabase:
           raise KeyError(
             f"'{d}' is not a set in the database. Enable add_missing_domains or add the set to the database manually.")
     self.database.add_variable_dc(identifier, gams.VarType.Free, domains, explanatory_text)
-    self.series[identifier] = df.set_index(domains).iloc[:, 0]
+    if domains:
+      series = df.set_index(domains).iloc[:, 0]
+    else:
+      series = df[df.columns[0]]
+    self.series[identifier] = series
 
   def add_variable_from_series(self, series, explanatory_text="", add_missing_domains=False):
     """Add variable symbol to database based on a Pandas series."""
-    if len(series) == 1:
+    if len(series) == 1 and series.index.name in [None, "*"]:
       df = pd.DataFrame(series)
     else:
       df = series.reset_index()
