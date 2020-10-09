@@ -1,46 +1,18 @@
 """
 """
 import os
-from collections.abc import Iterable
-
-from six import string_types
 
 import numpy as np
 import pandas as pd
 import gams
 import logging
 import builtins
+import time
 from copy import deepcopy
+from .utility import index_from_symbol, symbol_is_scalar, series_from_variable, \
+  series_from_parameter, is_iterable, map_lowest_level, set_symbol_records
 
 logger = logging.getLogger(__name__)
-
-
-def is_iterable(arg):
-  return isinstance(arg, Iterable) and not isinstance(arg, string_types)
-
-
-def map_lowest_level(func, x):
-  """Map lowest level of zero or more nested lists."""
-  if is_iterable(x):
-    return [map_lowest_level(func, i) for i in x]
-  else:
-    return func(x)
-
-
-def try_to_int(x):
-  """Cast input to int if possible, else return input unchanged."""
-  try:
-    if str(int(x)) == str(x):
-      return int(x)
-    else:
-      return x
-  except ValueError:
-    return x
-
-
-def map_to_int_where_possible(iter):
-  """Returns an iterable where each element is converted to an integer if possible for that element."""
-  return map_lowest_level(try_to_int, iter)
 
 
 class GamsPandasDatabase:
@@ -231,7 +203,7 @@ class GamsPandasDatabase:
     self.series[index.name] = index
     return self[name]
 
-  def create_variable_or_parameter(self, symbol_type, name, index, explanatory_text, data, dtype, copy, add_missing_domains):
+  def __create_variable_or_parameter(self, symbol_type, name, index, explanatory_text, data, dtype, copy, add_missing_domains):
     if index is not None:
       series = pd.Series(data, self.get_index(index), dtype, name, copy)
       series.explanatory_text = explanatory_text
@@ -242,27 +214,26 @@ class GamsPandasDatabase:
       getattr(self, f"add_{symbol_type}_from_series")(data, explanatory_text, add_missing_domains)
     else:
       if is_iterable(data) and len(data) and is_iterable(data[0]):
-        self.add_variable_or_parameter_to_database(symbol_type, name, len(data[0]), explanatory_text)
+        self.__add_variable_or_parameter_to_database(symbol_type, name, len(data[0]), explanatory_text)
       elif is_iterable(data):
         getattr(self, f"add_{symbol_type}_from_dataframe")(name, pd.DataFrame(data), explanatory_text, add_missing_domains)
       else:
-        self.add_variable_or_parameter_to_database(symbol_type, name, 0, explanatory_text)
+        self.__add_variable_or_parameter_to_database(symbol_type, name, 0, explanatory_text)
         self[name] = data
     return self[name]
 
-  def add_variable_or_parameter_to_database(self, symbol_type, name, data, explanatory_text):
+  def __add_variable_or_parameter_to_database(self, symbol_type, name, dim, explanatory_text):
     assert symbol_type in ["parameter", "variable"]
     if symbol_type == "parameter":
-      self.database.add_parameter(name, data, explanatory_text)
+      self.database.add_parameter(name, dim, explanatory_text)
     elif symbol_type == "variable":
-      self.database.add_variable(name, data, gams.VarType.Free, explanatory_text)
-    self[name] = data
+      self.database.add_variable(name, dim, gams.VarType.Free, explanatory_text)
 
   def create_variable(self, name, index=None, explanatory_text="", data=None, dtype=None, copy=False, add_missing_domains=False):
-    return self.create_variable_or_parameter("variable", name, index, explanatory_text, data, dtype, copy, add_missing_domains)
+    return self.__create_variable_or_parameter("variable", name, index, explanatory_text, data, dtype, copy, add_missing_domains)
 
   def create_parameter(self, name, index=None, explanatory_text="", data=None, dtype=None, copy=False, add_missing_domains=False):
-    return self.create_variable_or_parameter("parameter", name, index, explanatory_text, data, dtype, copy, add_missing_domains)
+    return self.__create_variable_or_parameter("parameter", name, index, explanatory_text, data, dtype, copy, add_missing_domains)
 
   @staticmethod
   def get_domains_from_index(index, name):
@@ -343,7 +314,14 @@ class GamsPandasDatabase:
   def export(self, path):
     """Save changes to database and export database to GDX file."""
     self.save_series_to_database()
-    self.database.export(os.path.abspath(path))
+    for i in range(1, 10):
+      try:
+        self.database.export(os.path.abspath(path))
+        break
+      except gams.workspace.GamsException:
+        time.sleep(i)
+    else:
+      self.database.export(os.path.abspath(path))
 
   def __iter__(self):
     return iter(self.symbols)
@@ -356,135 +334,3 @@ class GamsPandasDatabase:
     return self.symbols[name].get_text()
 
 
-def merge_symbol_records(series, symbol):
-  """Convert Pandas series to records in a GAMS Symbol"""
-  if isinstance(symbol, gams.GamsSet):
-    attr = "text"
-  elif isinstance(symbol, gams.GamsVariable):
-    attr = "level"
-  elif isinstance(symbol, gams.GamsParameter):
-    attr = "value"
-  for k, v in series.items():
-    setattr(symbol.merge_record(k), attr, v)
-
-
-def set_symbol_records(symbol, value):
-  """Convert Pandas series to records in a GAMS Symbol"""
-  if isinstance(symbol, gams.GamsSet):
-    if isinstance(value, pd.Index):
-      texts = getattr(value, "texts", None)
-      value = texts if texts is not None else pd.Series(map(str, value), index=value)
-
-    def add_record(symbol, k, v):
-      if not all_na(v):
-        symbol.add_record(k).text = str(v)
-  elif isinstance(symbol, gams.GamsVariable):
-    def add_record(symbol, k, v):
-      if not all_na(v):
-        symbol.add_record(k).level = v
-  elif isinstance(symbol, gams.GamsParameter):
-    def add_record(symbol, k, v):
-      if not all_na(v):
-        symbol.add_record(k).value = v
-  else:
-    TypeError(f"{type(symbol)} is not (yet) supported by gams_pandas")
-
-  symbol.clear()
-  if symbol_is_scalar(symbol):
-    add_record(symbol, None, value)
-  elif list(value.keys()) == [0]:  # If singleton series
-    add_record(symbol, None, value[0])
-  else:
-    for k, v in value.items():
-      add_record(symbol, map_lowest_level(str, k), v)
-
-
-def all_na(x):
-  """Returns bool of whether a series or scalar consists of all NAs"""
-  if is_iterable(x):
-    return all(pd.isna(x))
-  else:
-    return pd.isna(x)
-
-
-def index_names_from_symbol(symbol):
-  """
-  Return the domain names of a GAMS symbol,
-  except ['*'] cases are replaced by the name of the symbol
-  and ['*',..,'*'] cases are replaced with ['index_0',..'index_n']
-  """
-  index_names = list(symbol.domains_as_strings)
-  if index_names == ["*"]:
-    return [symbol.name]
-  if index_names.count("*") > 1:
-    for i, name in enumerate(index_names):
-      if name == "*":
-        index_names[i] = f"index_{i}"
-  return index_names
-
-
-def index_from_symbol(symbol):
-  """Return a Pandas Index based on the records and domain names of a GAMS symbol."""
-  if len(symbol.domains_as_strings) > 1:
-    keys = map_to_int_where_possible([rec.keys for rec in symbol])
-    index = pd.MultiIndex.from_tuples(keys, names=index_names_from_symbol(symbol))
-    index.name = symbol.name
-  elif len(symbol.domains_as_strings) == 1:
-    keys = map_to_int_where_possible([rec.keys[0] for rec in symbol])
-    index = pd.Index(keys, name=index_names_from_symbol(symbol)[0])
-  else:
-    return None
-  if isinstance(symbol, gams.GamsSet):
-    index.text = symbol.text
-    index.domains = symbol.domains_as_strings
-    index.texts = pd.Series([rec.text for rec in symbol], index, name=symbol.name)
-  return index
-
-
-def symbol_is_scalar(symbol):
-  return not symbol.domains_as_strings
-
-
-def series_from_variable(symbol, attr="level"):
-  """Get a variable symbol from the GAMS database and return an equivalent Pandas series."""
-  return pd.Series([getattr(rec, attr) for rec in symbol], index_from_symbol(symbol), name=symbol.name)
-
-
-def series_from_parameter(symbol):
-  """Get a parameter symbol from the GAMS database and return an equivalent Pandas series."""
-  return pd.Series([rec.value for rec in symbol], index_from_symbol(symbol), name=symbol.name)
-
-
-class Gdx(GamsPandasDatabase):
-  """Wrapper that opens a GDX file as a GamsPandasDatabase."""
-
-  def __init__(self, file_path, workspace=None):
-    if not file_path:
-      import easygui
-      file_path = easygui.fileopenbox("Select reference gdx file", filetypes=["*.gdx"])
-      if not file_path:
-        raise ValueError("No file path was provided")
-    if not os.path.splitext(file_path)[1]:
-      file_path = file_path + ".gdx"
-    self.abs_path = os.path.abspath(file_path)
-    logger.info(f"Open GDX file from {self.abs_path}.")
-    if workspace is None:
-      workspace = gams.GamsWorkspace()
-    database = workspace.add_database_from_gdx(self.abs_path)
-    super().__init__(database)
-
-  def export(self, path=None, relative_path=True):
-    """
-    Save changes to database and export database to GDX file.
-    If no path is specified, the path of the linked GDX file is used, overwriting the original.
-    Use relative_path=True to use export to a path relative to the directory of the originally linked GDX file.
-    """
-    if path is None:
-      path = self.abs_path
-    elif relative_path:
-      path = os.path.join(os.path.dirname(self.abs_path), path)
-    logger.info(f"Export GDX file to {path}.")
-    super().export(path)
-
-  def __repr__(self):
-    return f"dreamtools.gams_pandas.gams_pandas.Gdx from {self.abs_path}"

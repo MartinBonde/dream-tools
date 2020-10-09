@@ -4,8 +4,7 @@ sys.path.insert(0, os.getcwd())
 
 import numpy as np
 import pandas as pd
-
-from dreamtools import Gdx, GamsPandasDatabase
+from dreamtools import GamsPandasDatabase, Gdx
 
 
 @np.vectorize
@@ -96,8 +95,10 @@ def test_add_parameter_from_series():
 
 def test_create_variable():
   db = GamsPandasDatabase()
-  db.create_variable("scalar", data=1)
+  db.create_variable("scalar", data=3.2)
+  assert db.scalar == 3.2
   db.create_variable("vector", data=[1, 2], index=pd.Index(["a", "b"], name="ab"), add_missing_domains=True)
+  assert all(db.vector == [1, 2])
 
   db.create_variable("dataframe",
                      data=pd.DataFrame([
@@ -109,7 +110,29 @@ def test_create_variable():
                      add_missing_domains=True
                      )
   db.export("test_export.gdx")
-  assert Gdx("test_export.gdx")["scalar"] == 1
+  assert Gdx("test_export.gdx")["scalar"] == 3.2
+  assert all(Gdx("test_export.gdx")["vector"] == [1, 2])
+  assert all(db.s == ["ser", "goo"])
+  assert all(db.t == [2010, 2020])
+
+def test_create_parameter():
+  db = GamsPandasDatabase()
+  db.create_parameter("scalar", data=3.2)
+  assert db.scalar == 3.2
+  db.create_parameter("vector", data=[1, 2], index=pd.Index(["a", "b"], name="ab"), add_missing_domains=True)
+  assert all(db.vector == [1, 2])
+
+  db.create_parameter("dataframe",
+                     data=pd.DataFrame([
+                       [2010, "ser", 3],
+                       [2010, "goo", 2],
+                       [2020, "ser", 6],
+                       [2020, "goo", 4],
+                     ], columns=["t", "s", "value"]),
+                     add_missing_domains=True
+                     )
+  db.export("test_export.gdx")
+  assert Gdx("test_export.gdx")["scalar"] == 3.2
   assert all(Gdx("test_export.gdx")["vector"] == [1, 2])
   assert all(db.s == ["ser", "goo"])
   assert all(db.t == [2010, 2020])
