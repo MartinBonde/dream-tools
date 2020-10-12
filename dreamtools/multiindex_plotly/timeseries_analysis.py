@@ -73,18 +73,18 @@ def plot(iter_series,
   fig.update_layout(layout)
   return fig
 
-def dummy_function(x):
-  return x
-
 def to_dataframe(iter_series,
                  operator=None,
                  start_year=None,
                  end_year=None,
                  reference_database=None,
                  default_set_aggregations=None,
-                 function=dummy_function):
+                 function=None):
   if isinstance(iter_series, pd.Series):
     iter_series = [iter_series]
+
+  if function is None:
+    function = lambda x: x
 
   iter_series = [function(aggregate_series(s, default_set_aggregations, reference_database))
                  for s in iter_series]
