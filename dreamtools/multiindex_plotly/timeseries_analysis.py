@@ -136,8 +136,35 @@ def compare(iter_series, refs, operator):
     for b in refs:
       b.name = "baseline." + b.name
     return [i for pair in zip(iter_series, refs) for i in pair]
+  elif operator in ["p"]:
+    return [s / lag(s) * 100 - 100 for s in iter_series]
+  elif operator in ["d"]:
+    return [s - lag(s) for s in iter_series]
+  elif operator in ["i"]:
+    return [index(s) for s in iter_series]
+  elif operator in ["log"]:
+    return [np.log(s) for s in iter_series]
+  elif operator in ["rlog"]:
+    return [np.log(s) for s in refs]
+  elif operator in ["dlog"]:
+    return [np.log(s) - np.log(lag(s)) for s in iter_series]
   else:
     raise ValueError(f"{operator} is not a valid operator.")
+
+def index(series, level=-1, element=None):
+  """Return series divided by the value with the index element. E.g. set a series to 1 in a base year."""
+  if element is None:
+    element = dt.START_YEAR
+  if len(series.index.names) > 1:
+    return series / series.xs(element, level=level)
+  else:
+    return series / series[element]
+
+def lag(series, periods=1, lag_axis_index=-1):
+  if len(series.index.names) > 1:
+    return series.groupby(level=series.index.names[:lag_axis_index:]).shift(periods)
+  else:
+    return series.shift(periods)
 
 def unstack_multiseries(series, keep_axis_index=-1):
   """
