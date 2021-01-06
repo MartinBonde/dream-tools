@@ -306,10 +306,12 @@ class GamsPandasDatabase:
   def values(self):
     return self.symbols.values()
 
-  def save_series_to_database(self):
+  def save_series_to_database(self, series_names=None):
     """Save Pandas series to GAMS database"""
-    for symbol_name, series in self.series.items():
-      set_symbol_records(self.symbols[symbol_name], series)
+    if series_names is None:
+      series_names = self.series.keys()
+    for symbol_name in series_names:
+      set_symbol_records(self.symbols[symbol_name], self.series[symbol_name])
 
   def export(self, path):
     """Save changes to database and export database to GDX file."""
