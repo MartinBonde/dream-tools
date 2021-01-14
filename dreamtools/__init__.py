@@ -1,5 +1,6 @@
 from .gams_pandas import *
 from .multiindex_plotly import *
+import plotly.io as pio
 
 # Global setting controlling the default position of the time index (-1 = last index is time)
 X_AXIS_INDEX = -1
@@ -8,16 +9,23 @@ X_AXIS_INDEX = -1
 START_YEAR = 1965
 END_YEAR = 2100
 
-# Time settings, currently used for plotting only
+# Age settings, currently used for plotting only
 START_AGE = 0
 END_AGE = 100
 
 # Global databases
 REFERENCE_DATABASE = None
 
-# Domain specific settings
-from .multiindex_plotly import makro_settings as settings
-DEFAULT_SET_AGGREGATIONS = settings.DEFAULT_SET_AGGREGATIONS
-AGE_AXIS_TITLE = settings.AGE_AXIS_TITLE
-TIME_AXIS_TITLE = settings.TIME_AXIS_TITLE
-YAXIS_TITLE_FROM_OPERATOR = settings.YAXIS_TITLE_FROM_OPERATOR
+# Plotly settings
+LARGE_PLOT_WIDTH = 1830
+PLOT_HEIGHT = 592
+SMALL_PLOT_WIDTH = 897
+PLOT_SCALE = 3
+pio.orca.config.default_scale = PLOT_SCALE
+
+from .multiindex_plotly.dream_plotly_template import dream_template
+pio.templates["dream"] = dream_template
+pio.templates.default = "dream"
+
+# Model specific settings
+from .multiindex_plotly.makro_settings import *
