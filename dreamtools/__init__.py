@@ -1,5 +1,4 @@
 from .gams_pandas import *
-from .multiindex_plotly import *
 
 # Global setting controlling the default position of the time index (-1 = last index is time)
 X_AXIS_INDEX = -1
@@ -20,7 +19,7 @@ LARGE_PLOT_WIDTH = 1830
 PLOT_HEIGHT = 592
 SMALL_PLOT_WIDTH = 897
 PLOT_SCALE = 3
-pio.orca.config.default_scale = PLOT_SCALE
+from .multiindex_plotly import *
 
 # Model specific settings
 from .multiindex_plotly.makro_settings import *
