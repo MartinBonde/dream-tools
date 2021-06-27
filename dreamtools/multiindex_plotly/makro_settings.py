@@ -37,3 +37,4 @@ YAXIS_TITLE_FROM_OPERATOR = {
 	"q": "Ændring relativt til grundforløb",
 	"m": "Forskel fra grundfoløb",
 }
+

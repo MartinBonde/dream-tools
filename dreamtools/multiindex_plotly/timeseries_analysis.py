@@ -2,7 +2,7 @@ import dreamtools as dt
 import numpy as np
 import pandas as pd
 from IPython.display import display
-import plotly.graph_objects as go
+
 
 def time(start, end=None):
   """Set global time settings."""
@@ -88,56 +88,6 @@ def plot(iter_series,
   if xline is not None:
     fig = add_xline(fig, xline)
   return fig
-
-def small_figure(fig):
-    "Adjust figure with settings suitable for side by side use in the Office suite"
-    legend_height = 200 / dt.PLOT_SCALE + len(fig.data) * 64 / dt.PLOT_SCALE
-    width, height = dt.SMALL_PLOT_WIDTH / dt.PLOT_SCALE, dt.PLOT_HEIGHT / dt.PLOT_SCALE
-    fig = go.Figure(fig).update_layout(
-        width = width,
-        height = height + legend_height,
-        legend_y = - 200 / dt.PLOT_HEIGHT,
-        legend_yanchor = "top",
-        legend_orientation = "v",
-        margin = {"t": 20, "b": legend_height, "l": 60, "r": 10},
-
-        # Title is used as y-axis label
-        yaxis_title_text = "",
-        title_text = fig.layout.yaxis.title.text,
-        title_xanchor = "left", title_x = 0,
-        title_yanchor = "top", title_y = 1,
-        title_pad_l = 7, title_pad_t = 7,
-        title_font_size = 14,
-    )
-    if  max(len(i.name) for i in fig.data) > 30:  # Long legend entries cause the plot area size to change when centered
-        fig.update_layout(legend_x = 0, legend_xanchor = "left")
-    return fig
-
-def large_figure(fig):
-    "Adjust figure with settings suitable for use in the Office suite"
-    trace_count = len(fig.data)
-    col_count = 2
-    row_count = trace_count // col_count
-    for i, trace in enumerate(fig.data):
-        trace.legendgroup = i // (trace_count / col_count)
-    legend_height = 200 / dt.PLOT_SCALE + row_count * 64 / dt.PLOT_SCALE
-    width, height = dt.LARGE_PLOT_WIDTH / dt.PLOT_SCALE, dt.PLOT_HEIGHT / dt.PLOT_SCALE
-    fig = go.Figure(fig).update_layout(
-        width = width,
-        height = height + legend_height,
-        legend_y = - 200 / dt.PLOT_HEIGHT,
-        legend_yanchor = "top",
-        margin = {"t": 20, "b": legend_height, "l": 60, "r": 10},
-
-        # Title is used as y-axis label
-        yaxis_title_text="",
-        title_text=fig.layout.yaxis.title.text,
-        title_xanchor="left", title_x=0,
-        title_yanchor="top", title_y=1,
-        title_pad_l=7, title_pad_t=7,
-        title_font_size=14,
-    )
-    return fig
 
 def to_dataframe(iter_series,
                  operator=None,
@@ -267,5 +217,3 @@ def merge_multiseries(*series, keep_axis_index=-1):
         new_name = f"{c}{iter}"
       output[new_name] = df[c]
   return output
-
-
