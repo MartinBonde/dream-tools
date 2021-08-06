@@ -4,7 +4,7 @@ sys.path.insert(0, os.getcwd())
 
 import numpy as np
 import pandas as pd
-from dreamtools import GamsPandasDatabase, Gdx
+import dreamtools as dt
 
 
 @np.vectorize
@@ -13,14 +13,14 @@ def approximately_equal(x, y, ndigits=0):
 
 
 def test_gdx_read():
-  gdx = Gdx("test.gdx")
-  assert approximately_equal(gdx["qY"]["byg", 2010], 191)
-  assert approximately_equal(gdx["qI_s"]["IB", "fre", 2010], 4.43)  # "IB" should be changed to "iB" in the GDX file.
-  assert approximately_equal(gdx["eCx"], 1)
-  assert gdx["s"].name == "s_"
+  db = dt.Gdx("test.gdx")
+  assert approximately_equal(db["qY"]["byg", 2010], 191)
+  assert approximately_equal(db["qI_s"]["IB", "fre", 2010], 4.43)  # "IB" should be changed to "iB" in the GDX file.
+  assert approximately_equal(db["eCx"], 1)
+  assert db["s"].name == "s_"
 
 def test_create_set_from_index():
-  db = GamsPandasDatabase()
+  db = dt.GamsPandasDatabase()
   t = pd.Index(range(2010, 2026), name="t")
   db.create_set("t", t)
   assert db["t"].name == "t"
@@ -43,7 +43,7 @@ def test_create_set_from_index():
   assert db.st.domains == ["s", "t"]
 
 def test_add_parameter_from_dataframe():
-  db = GamsPandasDatabase()
+  db = dt.GamsPandasDatabase()
   df = pd.DataFrame()
   df["t"] = range(2010, 2026)
   df["value"] = 1.3
@@ -52,7 +52,7 @@ def test_add_parameter_from_dataframe():
   assert len(db["par"]) == 16
 
 def test_multiply_added():
-  db = GamsPandasDatabase()
+  db = dt.GamsPandasDatabase()
   df = pd.DataFrame([
     [2010, "ser", 3],
     [2010, "goo", 2],
@@ -74,7 +74,7 @@ def test_multiply_added():
   assert db["v"][2020, "goo"] == 4.8
 
 def test_add_parameter_from_series():
-  db = GamsPandasDatabase()
+  db = dt.GamsPandasDatabase()
 
   t = pd.Index(range(2010, 2026), name="t")
   par = pd.Series(1.4, index=t, name="par")
@@ -94,7 +94,7 @@ def test_add_parameter_from_series():
   assert len(db["scalar"]) == 1
 
 def test_create_variable():
-  db = GamsPandasDatabase()
+  db = dt.GamsPandasDatabase()
   db.create_variable("scalar", data=3.2)
   assert db.scalar == 3.2
   db.create_variable("vector", data=[1, 2], index=pd.Index(["a", "b"], name="ab"), add_missing_domains=True)
@@ -110,13 +110,13 @@ def test_create_variable():
                      add_missing_domains=True
                      )
   db.export("test_export.gdx")
-  assert Gdx("test_export.gdx")["scalar"] == 3.2
-  assert all(Gdx("test_export.gdx")["vector"] == [1, 2])
+  assert dt.Gdx("test_export.gdx")["scalar"] == 3.2
+  assert all(dt.Gdx("test_export.gdx")["vector"] == [1, 2])
   assert all(db.s == ["ser", "goo"])
   assert all(db.t == [2010, 2020])
 
 def test_create_parameter():
-  db = GamsPandasDatabase()
+  db = dt.GamsPandasDatabase()
   db.create_parameter("scalar", data=3.2)
   assert db.scalar == 3.2
   db.create_parameter("vector", data=[1, 2], index=pd.Index(["a", "b"], name="ab"), add_missing_domains=True)
@@ -132,13 +132,13 @@ def test_create_parameter():
                      add_missing_domains=True
                      )
   db.export("test_export.gdx")
-  assert Gdx("test_export.gdx")["scalar"] == 3.2
-  assert all(Gdx("test_export.gdx")["vector"] == [1, 2])
+  assert dt.Gdx("test_export.gdx")["scalar"] == 3.2
+  assert all(dt.Gdx("test_export.gdx")["vector"] == [1, 2])
   assert all(db.s == ["ser", "goo"])
   assert all(db.t == [2010, 2020])
 
 def test_add_variable_from_series():
-  db = GamsPandasDatabase()
+  db = dt.GamsPandasDatabase()
   t = pd.Index(range(2010, 2026), name="t")
   var = pd.Series(1.4, index=t, name="var")
   db.add_variable_from_series(var, add_missing_domains=True)
@@ -146,7 +146,7 @@ def test_add_variable_from_series():
   assert len(db["var"]) == 16
 
 def test_add_variable_from_dataframe():
-  db = GamsPandasDatabase()
+  db = dt.GamsPandasDatabase()
   df = pd.DataFrame([
     [2010, "ser", 3],
     [2010, "goo", 2],
@@ -159,78 +159,78 @@ def test_add_variable_from_dataframe():
 
 def test_multiply_with_different_sets():
   assert approximately_equal(
-    sum(Gdx("test.gdx")["qBNP"] * Gdx("test.gdx")["qI"] * Gdx("test.gdx")["qI_s"]),
+    sum(dt.Gdx("test.gdx")["qBNP"] * dt.Gdx("test.gdx")["qI"] * dt.Gdx("test.gdx")["qI_s"]),
     50730260150
   )
 
 def test_export_with_no_changes():
-  Gdx("test.gdx").export("test_export.gdx", relative_path=True)
+  dt.Gdx("test.gdx").export("test_export.gdx", relative_path=True)
   assert round(os.stat("test.gdx").st_size, -5) == round(os.stat("test_export.gdx").st_size, -5)
 
 def test_export_variable_with_changes():
-  gdx = Gdx("test.gdx")
-  gdx["qY"] = gdx["qY"] * 2
-  gdx.export("test_export.gdx", relative_path=True)
-  old, new = Gdx("test.gdx"), Gdx("test_export.gdx")
+  db = dt.Gdx("test.gdx")
+  db["qY"] = db["qY"] * 2
+  db.export("test_export.gdx", relative_path=True)
+  old, new = dt.Gdx("test.gdx"), dt.Gdx("test_export.gdx")
   assert all(old["qY"] * 2 == new["qY"])
 
 def test_export_scalar_with_changes():
-  gdx = Gdx("test.gdx")
-  gdx["eCx"] = gdx["eCx"] * 2
-  gdx.export("test_export.gdx", relative_path=True)
+  db = dt.Gdx("test.gdx")
+  db["eCx"] = db["eCx"] * 2
+  db.export("test_export.gdx", relative_path=True)
 
-  old, new = Gdx("test.gdx"), Gdx("test_export.gdx")
+  old, new = dt.Gdx("test.gdx"), dt.Gdx("test_export.gdx")
   assert approximately_equal(old["eCx"] * 2, new["eCx"])
 
 def test_export_set_with_changes():
-  gdx = Gdx("test.gdx")
-  gdx["s"].texts["tje"] = "New text"
-  gdx.export("test_export.gdx", relative_path=True)
-  assert Gdx("test_export.gdx")["s"].texts["tje"] == "New text"
+  db = dt.Gdx("test.gdx")
+  db["s"].texts["tje"] = "New text"
+  db.export("test_export.gdx", relative_path=True)
+  assert dt.Gdx("test_export.gdx")["s"].texts["tje"] == "New text"
 
 def test_copy_set():
-  gdx = Gdx("test.gdx")
-  gdx["alias"] = gdx["s"]
-  gdx["alias"].name = "alias"
-  index = gdx["alias"]
-  domains = ["*" if i in (None, index.name) else i for i in gdx.get_domains_from_index(index, index.name)]
-  gdx.database.add_set_dc(index.name, domains, "")
+  db = dt.Gdx("test.gdx")
+  db["alias"] = db["s"]
+  db["alias"].name = "alias"
+  index = db["alias"]
+  domains = ["*" if i in (None, index.name) else i for i in db.get_domains_from_index(index, index.name)]
+  db.database.add_set_dc(index.name, domains, "")
   index = index.copy()
   index.domains = domains
-  gdx.series[index.name] = index
-  gdx.export("test_export.gdx", relative_path=True)
-  assert all(Gdx("test_export.gdx")["alias"] == gdx["s"])
+  db.series[index.name] = index
+  db.export("test_export.gdx", relative_path=True)
+  assert all(dt.Gdx("test_export.gdx")["alias"] == db["s"])
 
 def test_export_added_variable():
-  gdx = Gdx("test.gdx")
-  gdx.create_variable("foo", [gdx.a, gdx.t], explanatory_text="Variable added from Python.")
-  gdx["foo"] = 42
-  gdx.export("test_export.gdx", relative_path=True)
-  assert all(approximately_equal(Gdx("test_export.gdx")["foo"], 42))
+  db = dt.Gdx("test.gdx")
+  db.create_variable("foo", [db.a, db.t], explanatory_text="Variable added from Python.")
+  db["foo"] = 42
+  db.export("test_export.gdx", relative_path=True)
+  assert all(approximately_equal(dt.Gdx("test_export.gdx")["foo"], 42))
 
 def test_export_NAs():
-  db = GamsPandasDatabase()
+  db = dt.GamsPandasDatabase()
   t = db.create_set("t", range(5))
   p = db.create_parameter("p", t)
   assert len(db["p"]) == 5
   assert len(db.symbols["p"]) == 0
   db.export("test_export.gdx")
 
-  db = Gdx("test_export.gdx")
+  db = dt.Gdx("test_export.gdx")
   assert all(pd.isna(db["p"]))
   assert len(db["p"]) == 0
   assert len(db.symbols["p"]) == 0
 
 def test_detuple():
-  assert GamsPandasDatabase.detuple("aaa") == "aaa"
-  assert GamsPandasDatabase.detuple(("aaa",)) == "aaa"
-  assert list(GamsPandasDatabase.detuple(("aaa", "bbb"))) == ["aaa", "bbb"]
-  assert GamsPandasDatabase.detuple(1) == 1
-  assert list(GamsPandasDatabase.detuple([1, 2])) == [1, 2]
+  assert dt.GamsPandasDatabase.detuple("aaa") == "aaa"
+  assert dt.GamsPandasDatabase.detuple(("aaa",)) == "aaa"
+  assert list(dt.GamsPandasDatabase.detuple(("aaa", "bbb"))) == ["aaa", "bbb"]
+  assert dt.GamsPandasDatabase.detuple(1) == 1
+  assert list(dt.GamsPandasDatabase.detuple([1, 2])) == [1, 2]
 
 def test_create_methods():
   # Create empty GamsPandasDatabase and alias creation methods
-  db = GamsPandasDatabase()
+  db = dt.GamsPandasDatabase()
   Par, Var, Set = db.create_parameter, db.create_variable, db.create_set
 
   # Create sets from scratch

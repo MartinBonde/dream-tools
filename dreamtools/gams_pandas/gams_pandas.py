@@ -9,11 +9,10 @@ import logging
 import builtins
 import time
 from copy import deepcopy
-from .utility import index_from_symbol, symbol_is_scalar, series_from_variable, \
-  series_from_parameter, is_iterable, map_lowest_level, set_symbol_records
+from .utility import index_from_symbol, symbol_is_scalar, is_iterable, map_lowest_level, index_names_from_symbol, all_na
+import gams2numpy
 
 logger = logging.getLogger(__name__)
-
 
 class GamsPandasDatabase:
   """
@@ -28,6 +27,7 @@ class GamsPandasDatabase:
         workspace = gams.GamsWorkspace()
       database = workspace.add_database()
     self.database = database
+    self.gams2numpy = gams2numpy.Gams2Numpy(database.workspace.system_directory)
     self.auto_sort_index = auto_sort_index
     self.series = {}
 
@@ -258,6 +258,24 @@ class GamsPandasDatabase:
       pass
     return t
 
+  def series_from_symbol(self, symbol, attributes, attr):
+    index_names = index_names_from_symbol(symbol)
+    df = pd.DataFrame(
+      self.gams2numpy.gdxReadSymbolStr(self.abs_path, symbol.name),
+      columns=[*index_names, *attributes]
+    )
+    for i in index_names:
+      df[i] = df[i].astype(int, errors="ignore")
+    series = df.set_index(index_names)[attr]
+    series.name = symbol.name
+    return series
+
+  def series_from_variable(self, symbol, attr="level"):
+    return self.series_from_symbol(symbol, ["level", "marginal", "lower", "upper", "scale"], "level")
+
+  def series_from_parameter(self, symbol):
+    return self.series_from_symbol(symbol, ["level"], "level")
+
   def __getitem__(self, item):
     if item not in self.series:
       symbol = self.symbols[item]
@@ -269,7 +287,8 @@ class GamsPandasDatabase:
         if symbol_is_scalar(symbol):
           self.series[item] = symbol.find_record().level if len(symbol) else None
         else:
-          self.series[item] = series_from_variable(symbol)
+          self.series[item] = self.series_from_variable(symbol)
+          # self.series[item] = series_from_variable(symbol)
           if self.auto_sort_index:
             self.series[item] = self.series[item].sort_index()
 
@@ -277,7 +296,8 @@ class GamsPandasDatabase:
         if symbol_is_scalar(symbol):
           self.series[item] = symbol.find_record().value if len(symbol) else None
         else:
-          self.series[item] = series_from_parameter(symbol)
+          self.series[item] = self.series_from_parameter(symbol)
+          # self.series[item] = series_from_parameter(symbol)
           if self.auto_sort_index:
             self.series[item] = self.series[item].sort_index()
 
@@ -290,7 +310,7 @@ class GamsPandasDatabase:
     if name in self.symbols:
       if not is_iterable(value) and is_iterable(self[name]):  # If assigning a scalar to all records in a series
         value = pd.Series(value, index=self[name].index)
-      set_symbol_records(self.symbols[name], value)
+      self.set_symbol_records(self.symbols[name], value)
       self.series[name] = value
     else:
       if not value.name:
@@ -311,7 +331,7 @@ class GamsPandasDatabase:
     if series_names is None:
       series_names = self.series.keys()
     for symbol_name in series_names:
-      set_symbol_records(self.symbols[symbol_name], self.series[symbol_name])
+      self.set_symbol_records(self.symbols[symbol_name], self.series[symbol_name])
 
   def export(self, path):
     """Save changes to database and export database to GDX file."""
@@ -325,6 +345,55 @@ class GamsPandasDatabase:
     else:
       self.database.export(os.path.abspath(path))
 
+  def set_parameter_records(self, symbol, value):
+    symbol.clear()
+    if all_na(value): pass
+    elif symbol_is_scalar(symbol):
+      symbol.add_record().value = value
+    else:
+      df = value.reset_index()
+      df[value.index.names] = df[value.index.names].astype(str)
+      self.gams2numpy.gmdFillSymbolStr(self.database, symbol, df.to_numpy())
+
+  @staticmethod
+  def set_variable_records(symbol, value):
+    symbol.clear()
+    if all_na(value): pass
+    elif symbol_is_scalar(symbol):
+      symbol.add_record().level = value
+    elif list(value.keys()) == [0]:  # If singleton series
+      symbol.add_record().level = value[0]
+    else:
+      for k, v in value.items():
+        symbol.add_record(map_lowest_level(str, k)).level = v
+
+  @staticmethod
+  def set_set_records(symbol, value):
+    if isinstance(value, pd.Index):
+      texts = getattr(value, "texts", None)
+      value = texts if texts is not None else pd.Series(map(str, value), index=value)
+
+    symbol.clear()
+    if all_na(value): pass
+    elif symbol_is_scalar(symbol):
+      symbol.add_record().text = str(value)
+    elif list(value.keys()) == [0]:  # If singleton series
+      symbol.add_record().text = value[0]
+    else:
+      for k, v in value.items():
+        symbol.add_record(map_lowest_level(str, k)).text = v
+
+  def set_symbol_records(self, symbol, value):
+    """Convert Pandas series to records in a GAMS Symbol"""
+    if isinstance(symbol, gams.GamsSet):
+      self.set_set_records(symbol, value)
+    elif isinstance(symbol, gams.GamsVariable):
+      self.set_variable_records(symbol, value)
+    elif isinstance(symbol, gams.GamsParameter):
+      self.set_parameter_records(symbol, value)
+    else:
+      TypeError(f"{type(symbol)} is not (yet) supported by gams_pandas")
+
   def __iter__(self):
     return iter(self.symbols)
 
@@ -334,5 +403,3 @@ class GamsPandasDatabase:
   def get_text(self, name):
     """Get explanatory text of GAMS symbol."""
     return self.symbols[name].get_text()
-
-

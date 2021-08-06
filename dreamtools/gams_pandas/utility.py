@@ -4,7 +4,6 @@ import gams
 import pandas as pd
 from six import string_types
 
-
 def all_na(x):
   """Returns bool of whether a series or scalar consists of all NAs"""
   if is_iterable(x):
@@ -51,16 +50,6 @@ def symbol_is_scalar(symbol):
   return not symbol.domains_as_strings
 
 
-def series_from_variable(symbol, attr="level"):
-  """Get a variable symbol from the GAMS database and return an equivalent Pandas series."""
-  return pd.Series([getattr(rec, attr) for rec in symbol], index_from_symbol(symbol), name=symbol.name)
-
-
-def series_from_parameter(symbol):
-  """Get a parameter symbol from the GAMS database and return an equivalent Pandas series."""
-  return pd.Series([rec.value for rec in symbol], index_from_symbol(symbol), name=symbol.name)
-
-
 def is_iterable(arg):
   return isinstance(arg, Iterable) and not isinstance(arg, string_types)
 
@@ -101,32 +90,15 @@ def merge_symbol_records(series, symbol):
     setattr(symbol.merge_record(k), attr, v)
 
 
-def set_symbol_records(symbol, value):
-  """Convert Pandas series to records in a GAMS Symbol"""
-  if isinstance(symbol, gams.GamsSet):
-    if isinstance(value, pd.Index):
-      texts = getattr(value, "texts", None)
-      value = texts if texts is not None else pd.Series(map(str, value), index=value)
-
-    def add_record(symbol, k, v):
-      if not all_na(v):
-        symbol.add_record(k).text = str(v)
-  elif isinstance(symbol, gams.GamsVariable):
-    def add_record(symbol, k, v):
-      if not all_na(v):
-        symbol.add_record(k).level = v
-  elif isinstance(symbol, gams.GamsParameter):
-    def add_record(symbol, k, v):
-      if not all_na(v):
-        symbol.add_record(k).value = v
-  else:
-    TypeError(f"{type(symbol)} is not (yet) supported by gams_pandas")
-
-  symbol.clear()
-  if symbol_is_scalar(symbol):
-    add_record(symbol, None, value)
-  elif list(value.keys()) == [0]:  # If singleton series
-    add_record(symbol, None, value[0])
-  else:
-    for k, v in value.items():
-      add_record(symbol, map_lowest_level(str, k), v)
+def fill_missing_combinations(series, sets_database=None, fill_value=pd.NA):
+  """
+  Return copy of series with all combinations filled with fill_value.
+  If a database is supplied we look up the sets in the database, otherwise we only fill set elements already in use.
+  """
+  sets = [i.unique() for i in series.index.levels[:]]
+  if sets_database is not None:
+    for i, set_name in enumerate(series.index.names):
+      if set_name in sets_database:
+        sets[i] = sets_database[set_name]
+  all_combinations = pd.MultiIndex.from_product(sets)
+  return series.reindex(all_combinations, fill_value=fill_value)
