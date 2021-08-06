@@ -258,23 +258,23 @@ class GamsPandasDatabase:
       pass
     return t
 
-  def series_from_symbol(self, symbol, attributes, attr):
+  def series_from_symbol(self, symbol, attributes, attribute):
     index_names = index_names_from_symbol(symbol)
     df = pd.DataFrame(
       self.gams2numpy.gdxReadSymbolStr(self.abs_path, symbol.name),
-      columns=[*index_names, *attributes]
+      columns=[*index_names, *attributes],
     )
     for i in index_names:
       df[i] = df[i].astype(int, errors="ignore")
-    series = df.set_index(index_names)[attr]
+    series = df.set_index(index_names)[attribute].astype(float).replace(5e+300, pd.NA)
     series.name = symbol.name
     return series
 
   def series_from_variable(self, symbol, attr="level"):
-    return self.series_from_symbol(symbol, ["level", "marginal", "lower", "upper", "scale"], "level")
+    return self.series_from_symbol(symbol, attributes=["level", "marginal", "lower", "upper", "scale"], attribute="level")
 
   def series_from_parameter(self, symbol):
-    return self.series_from_symbol(symbol, ["level"], "level")
+    return self.series_from_symbol(symbol, attributes=["level"], attribute="level")
 
   def __getitem__(self, item):
     if item not in self.series:
