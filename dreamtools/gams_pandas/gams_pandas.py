@@ -265,10 +265,10 @@ class GamsPandasDatabase:
         self.gams2numpy.gmdReadSymbolStr(self.database, symbol.name),
         columns=[*index_names, *attributes],
       )
-    except Exception:  # In case gams2numpy breaks, try using the regular API
+    except:  # In case gams2numpy breaks, try using the regular API
       df = pd.DataFrame(
-        [rec.keys + [getattr(rec, attr) for attr in attributes] for rec in list(symbol)],
-        columns=[*index_names, *attributes],
+        [[*rec.keys, getattr(rec, attribute)] for rec in list(symbol)],
+        columns=[*index_names, attribute],
       )
     for i in index_names:
       df[i] = df[i].astype(int, errors="ignore")
