@@ -260,10 +260,16 @@ class GamsPandasDatabase:
 
   def series_from_symbol(self, symbol, attributes, attribute):
     index_names = index_names_from_symbol(symbol)
-    df = pd.DataFrame(
-      self.gams2numpy.gmdReadSymbolStr(self.database, symbol.name),
-      columns=[*index_names, *attributes],
-    )
+    try:
+      df = pd.DataFrame(
+        self.gams2numpy.gmdReadSymbolStr(self.database, symbol.name),
+        columns=[*index_names, *attributes],
+      )
+    except Exception:  # In case gams2numpy breaks, try using the regular API
+      df = pd.DataFrame(
+        [rec.keys + [getattr(rec, attr) for attr in attributes] for rec in list(symbol)],
+        columns=[*index_names, *attributes],
+      )
     for i in index_names:
       df[i] = df[i].astype(int, errors="ignore")
     series = df.set_index(index_names)[attribute].astype(float)
