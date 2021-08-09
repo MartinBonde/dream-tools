@@ -280,7 +280,7 @@ class GamsPandasDatabase:
     return self.series_from_symbol(symbol, attributes=["level", "marginal", "lower", "upper", "scale"], attribute="level")
 
   def series_from_parameter(self, symbol):
-    return self.series_from_symbol(symbol, attributes=["level"], attribute="level")
+    return self.series_from_symbol(symbol, attributes=["value"], attribute="value")
 
   def __getitem__(self, item):
     if item not in self.series:
@@ -294,7 +294,6 @@ class GamsPandasDatabase:
           self.series[item] = symbol.find_record().level if len(symbol) else None
         else:
           self.series[item] = self.series_from_variable(symbol)
-          # self.series[item] = series_from_variable(symbol)
           if self.auto_sort_index:
             self.series[item] = self.series[item].sort_index()
 
@@ -303,7 +302,6 @@ class GamsPandasDatabase:
           self.series[item] = symbol.find_record().value if len(symbol) else None
         else:
           self.series[item] = self.series_from_parameter(symbol)
-          # self.series[item] = series_from_parameter(symbol)
           if self.auto_sort_index:
             self.series[item] = self.series[item].sort_index()
 

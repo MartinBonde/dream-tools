@@ -17,6 +17,8 @@ def test_gdx_read():
   assert approximately_equal(db["qY"]["byg", 2010], 191)
   assert approximately_equal(db["qI_s"]["IB", "fre", 2010], 4.43)  # "IB" should be changed to "iB" in the GDX file.
   assert approximately_equal(db["eCx"], 1)
+  assert db["fp"] == 1.0178
+  assert all(approximately_equal(db["inf_factor"], db["fp"]**(2010 - db["inf_factor"].index)))
   assert db["s"].name == "s_"
   assert db.vHh.loc["Net","tot",1970] == 5e-324
 
