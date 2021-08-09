@@ -18,7 +18,7 @@ def test_gdx_read():
   assert approximately_equal(db["qI_s"]["IB", "fre", 2010], 4.43)  # "IB" should be changed to "iB" in the GDX file.
   assert approximately_equal(db["eCx"], 1)
   assert db["s"].name == "s_"
-  assert pd.isna(db.vHh.loc["Net","tot",1970])
+  assert db.vHh.loc["Net","tot",1970] == 5e-324
 
 def test_create_set_from_index():
   db = dt.GamsPandasDatabase()

@@ -261,12 +261,12 @@ class GamsPandasDatabase:
   def series_from_symbol(self, symbol, attributes, attribute):
     index_names = index_names_from_symbol(symbol)
     df = pd.DataFrame(
-      self.gams2numpy.gdxReadSymbolStr(self.abs_path, symbol.name),
+      self.gams2numpy.gmdReadSymbolStr(self.database, symbol.name),
       columns=[*index_names, *attributes],
     )
     for i in index_names:
       df[i] = df[i].astype(int, errors="ignore")
-    series = df.set_index(index_names)[attribute].astype(float).replace(5e+300, pd.NA)
+    series = df.set_index(index_names)[attribute].astype(float)
     series.name = symbol.name
     return series
 
