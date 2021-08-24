@@ -9,7 +9,8 @@ import logging
 import builtins
 import time
 from copy import deepcopy
-from .utility import index_from_symbol, symbol_is_scalar, is_iterable, map_lowest_level, index_names_from_symbol, all_na
+from .utility import index_from_symbol, symbol_is_scalar, is_iterable, map_lowest_level, index_names_from_symbol, \
+  all_na, map_to_int_where_possible
 import gams2numpy
 
 logger = logging.getLogger(__name__)
@@ -271,7 +272,7 @@ class GamsPandasDatabase:
         columns=[*index_names, attribute],
       )
     for i in index_names:
-      df[i] = df[i].astype(int, errors="ignore")
+      df[i] = map_to_int_where_possible(df[i])
     series = df.set_index(index_names)[attribute].astype(float)
     series.name = symbol.name
     return series

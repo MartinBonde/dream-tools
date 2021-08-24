@@ -21,6 +21,7 @@ def test_gdx_read():
   assert all(approximately_equal(db["inf_factor"], db["fp"]**(2010 - db["inf_factor"].index)))
   assert db["s"].name == "s_"
   assert db.vHh.loc["Net","tot",1970] == 5e-324
+  assert set(db["vHh"].index.get_level_values("a_")).issubset(set(db["a_"]))
 
 def test_create_set_from_index():
   db = dt.GamsPandasDatabase()
