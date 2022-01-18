@@ -43,10 +43,13 @@ def prt(iter_series,
         reference_database=None,
         default_set_aggregations=None,
         function=None,
+        names=None,
         dec=6,
         max_rows=100,
         max_columns=20,):
   df = to_dataframe(iter_series, operator, start_year, end_year, reference_database, default_set_aggregations, function)
+  if names:
+    df.columns = names
   df.style.set_properties(**{"text-align": "right", "precision": dec})
   with pd.option_context('display.max_rows', max_rows, 'display.max_columns', max_columns):  # more options can be specified also
     display(df)
