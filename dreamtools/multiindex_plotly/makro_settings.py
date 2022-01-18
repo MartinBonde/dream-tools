@@ -18,15 +18,15 @@ DEFAULT_SET_AGGREGATIONS = {
 	"r" : ['tje', 'fre', 'byg', 'soe', 'bol', 'lan', 'ene', 'udv', 'off'],
 
 	"i_": ['iTot',],
-	"i" : ['iM', 'iB', 'iL'],
+	"i" : ['IM', 'IB', 'IL'],
 
-	"k_": ['iM', 'iB'],
-	"k" : ['iM', 'iB'],
+	"k_": ['IM', 'IB'],
+	"k" : ['IM', 'IB'],
 
-  "portf": ['Net',],
-  "portf_": ['Net',],
+  "portf_": ['NetFin',],
+	"portf": ['NetFin', ],
 
-  "scen_": ['GovSpending', 'IntRate', 'ForeignDemand'],
+	"scen_": ['GovSpending', 'IntRate', 'ForeignDemand'],
 }
 
 AGE_AXIS_TITLE = "Alder"
