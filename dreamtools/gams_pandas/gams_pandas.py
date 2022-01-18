@@ -273,7 +273,10 @@ class GamsPandasDatabase:
       )
     for i in index_names:
       df[i] = map_to_int_where_possible(df[i])
-    series = df.set_index(index_names)[attribute].astype(float)
+    df.set_index(index_names, inplace=True)
+    if len(df) == 0:
+      df.index = self.get_index([self[i] for i in index_names])[[]]  # Get the correct data types and size of index
+    series = df[attribute].astype(float)
     series.name = symbol.name
     return series
 

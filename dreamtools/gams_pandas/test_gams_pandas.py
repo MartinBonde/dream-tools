@@ -262,3 +262,27 @@ def test_create_methods():
   assert all(fq.loc[2010:2011] == [1, 1.01])
   assert pd.isna(d["tjenester",2010])
   assert pd.isna(y["tjenester",2010])
+
+def test_import_export_empty():
+  # Create empty GamsPandasDatabase and alias creation methods
+  db = dt.GamsPandasDatabase()
+  Par, Var, Set = db.create_parameter, db.create_variable, db.create_set
+
+  # Create sets from scratch
+  t = Set("t", range(2000, 2021), "Årstal")
+  s = Set("s", ["tjenester", "fremstilling"], "Brancher", ["Tjenester", "Fremstilling"])
+  p = Par("p", [s, t])
+  v = Var("v", [s, t])
+  db.p = p.loc[[], []]
+  db.v = p.loc[[], []]
+
+  db.export("test_export.gdx")
+  db = dt.Gdx("test_export.gdx")
+
+  db.p.loc[t, s] = 1
+  db.v.loc[t, s] = 1
+  db.export("test_export.gdx")
+  db = dt.Gdx("test_export.gdx")
+
+  assert all(db.p == 1)
+  assert all(db.v == 1)
