@@ -1,0 +1,11 @@
+*.g00
+*.lst
+*.gmy
+*.pkl
+*.lyx~
+*.sublime-workspace
+*.pyc
+*.dat
+
+*.gdx
+!test.gdx
