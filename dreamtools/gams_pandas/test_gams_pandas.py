@@ -11,21 +11,20 @@ import dreamtools as dt
 def approximately_equal(x, y, ndigits=0):
   return round(x, ndigits) == round(y, ndigits)
 
-
 def test_gdx_read():
   db = dt.Gdx("test.gdx")
-  assert approximately_equal(db["qY"]["byg", 2010], 191)
-  assert approximately_equal(db["qI_s"]["IB", "fre", 2010], 4.43)  # "IB" should be changed to "iB" in the GDX file.
-  assert approximately_equal(db["eCx"], 1)
+  assert approximately_equal(db["qY"]["byg", 2025], 257.55)
+  assert approximately_equal(db["qI_s"]["IB", "fre", 2025], 7.41)
+  assert approximately_equal(db["eHh"], 1.25)
   assert db["fp"] == 1.0178
   assert all(approximately_equal(db["inf_factor"], db["fp"]**(2010 - db["inf_factor"].index)))
   assert db["s"].name == "s_"
-  assert db.vHh.loc["Net","tot",1970] == 5e-324
+  assert db.vHh.loc["NetFin","tot",1970] == 0
   assert set(db["vHh"].index.get_level_values("a_")).issubset(set(db["a_"]))
 
 def test_create_set_from_index():
   db = dt.GamsPandasDatabase()
-  t = pd.Index(range(2010, 2026), name="t")
+  t = pd.Index(range(2025, 2036), name="t")
   db.create_set("t", t)
   assert db["t"].name == "t"
   assert all(db["t"] == t)
@@ -49,25 +48,25 @@ def test_create_set_from_index():
 def test_add_parameter_from_dataframe():
   db = dt.GamsPandasDatabase()
   df = pd.DataFrame()
-  df["t"] = range(2010, 2026)
+  df["t"] = range(2025, 2036)
   df["value"] = 1.3
   db.add_parameter_from_dataframe("par", df, add_missing_domains=True)
   assert all(db["par"] == 1.3)
-  assert len(db["par"]) == 16
+  assert len(db["par"]) == 11
 
 def test_multiply_added():
   db = dt.GamsPandasDatabase()
   df = pd.DataFrame([
-    [2010, "ser", 3],
-    [2010, "goo", 2],
-    [2020, "ser", 6],
-    [2020, "goo", 4],
+    [2025, "ser", 3],
+    [2025, "goo", 2],
+    [2035, "ser", 6],
+    [2035, "goo", 4],
   ], columns=["t", "s", "value"])
   db.add_parameter_from_dataframe("q", df, add_missing_domains=True)
 
   df = pd.DataFrame([
-    [2010, 1],
-    [2020, 1.2],
+    [2025, 1],
+    [2035, 1.2],
   ], columns=["t", "value"])
   db.add_parameter_from_dataframe("p", df, add_missing_domains=True)
 
@@ -75,16 +74,16 @@ def test_multiply_added():
   v.name = "v"
   db.add_parameter_from_series(v)
 
-  assert db["v"][2020, "goo"] == 4.8
+  assert db["v"][2035, "goo"] == 4.8
 
 def test_add_parameter_from_series():
   db = dt.GamsPandasDatabase()
 
-  t = pd.Index(range(2010, 2026), name="t")
+  t = pd.Index(range(2025, 2036), name="t")
   par = pd.Series(1.4, index=t, name="par")
   db.add_parameter_from_series(par, add_missing_domains=True)
   assert all(db["par"] == 1.4)
-  assert len(db["par"]) == 16
+  assert len(db["par"]) == 11
 
   ss = pd.Index(["foo"], name="ss")
   singleton = pd.Series(1.4, index=ss, name="singleton")
@@ -106,10 +105,10 @@ def test_create_variable():
 
   db.create_variable("dataframe",
                      data=pd.DataFrame([
-                       [2010, "ser", 3],
-                       [2010, "goo", 2],
-                       [2020, "ser", 6],
-                       [2020, "goo", 4],
+                       [2025, "ser", 3],
+                       [2025, "goo", 2],
+                       [2035, "ser", 6],
+                       [2035, "goo", 4],
                      ], columns=["t", "s", "value"]),
                      add_missing_domains=True
                      )
@@ -117,7 +116,7 @@ def test_create_variable():
   assert dt.Gdx("test_export.gdx")["scalar"] == 3.2
   assert all(dt.Gdx("test_export.gdx")["vector"] == [1, 2])
   assert all(db.s == ["ser", "goo"])
-  assert all(db.t == [2010, 2020])
+  assert all(db.t == [2025, 2035])
 
 def test_create_parameter():
   db = dt.GamsPandasDatabase()
@@ -128,10 +127,10 @@ def test_create_parameter():
 
   db.create_parameter("dataframe",
                      data=pd.DataFrame([
-                       [2010, "ser", 3],
-                       [2010, "goo", 2],
-                       [2020, "ser", 6],
-                       [2020, "goo", 4],
+                       [2025, "ser", 3],
+                       [2025, "goo", 2],
+                       [2035, "ser", 6],
+                       [2035, "goo", 4],
                      ], columns=["t", "s", "value"]),
                      add_missing_domains=True
                      )
@@ -139,7 +138,7 @@ def test_create_parameter():
   assert dt.Gdx("test_export.gdx")["scalar"] == 3.2
   assert all(dt.Gdx("test_export.gdx")["vector"] == [1, 2])
   assert all(db.s == ["ser", "goo"])
-  assert all(db.t == [2010, 2020])
+  assert all(db.t == [2025, 2035])
 
 def test_add_variable_from_series():
   db = dt.GamsPandasDatabase()
@@ -162,10 +161,10 @@ def test_add_variable_from_dataframe():
   assert all(db.s == ["ser", "goo"])
 
 def test_multiply_with_different_sets():
-  assert approximately_equal(
-    sum(dt.Gdx("test.gdx")["qBNP"] * dt.Gdx("test.gdx")["qI"] * dt.Gdx("test.gdx")["qI_s"]),
-    50730260150
-  )
+  db = dt.Gdx("test.gdx")
+  i, s = db["i"], db["s"]
+  result = (db["pI"] * db["qI_s"].loc[i, s]).groupby("t").sum() / db["vI"]["iTot"] # Using pI_s would give exact 1
+  assert all(approximately_equal(result.loc[2030:], 1))
 
 def test_export_with_no_changes():
   dt.Gdx("test.gdx").export("test_export.gdx", relative_path=True)
@@ -180,11 +179,11 @@ def test_export_variable_with_changes():
 
 def test_export_scalar_with_changes():
   db = dt.Gdx("test.gdx")
-  db["eCx"] = db["eCx"] * 2
+  db["eHh"] = db["eHh"] * 2
   db.export("test_export.gdx", relative_path=True)
 
   old, new = dt.Gdx("test.gdx"), dt.Gdx("test_export.gdx")
-  assert approximately_equal(old["eCx"] * 2, new["eCx"])
+  assert approximately_equal(old["eHh"] * 2, new["eHh"])
 
 def test_export_set_with_changes():
   db = dt.Gdx("test.gdx")
