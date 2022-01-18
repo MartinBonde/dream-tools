@@ -116,12 +116,14 @@ def to_dataframe(iter_series,
             for i, s in enumerate(iter_series)]
     iter_series = compare(iter_series, refs, operator)
 
-  if start_year is None:
-    start_year = dt.START_YEAR
-  if end_year is None:
-    end_year = dt.END_YEAR
-
-  return merge_multiseries(*iter_series).loc[start_year:end_year]
+  df = merge_multiseries(*iter_series)
+  if "t" in df.index.names:
+    if start_year is None:
+      start_year = dt.START_YEAR
+    if end_year is None:
+      end_year = dt.END_YEAR
+    df = df.loc[start_year:end_year]
+  return df
 
 def dimension_changed(series, reference_database):
   if series.name in reference_database:
