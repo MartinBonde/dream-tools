@@ -22,7 +22,7 @@ class GamsPandasDatabase:
   Changes to retrieved series are written to the GAMS database on export.
   """
 
-  def __init__(self, database=None, workspace=None, auto_sort_index=True):
+  def __init__(self, database=None, workspace=None, auto_sort_index=True, sparse=True):
     if database is None:
       if workspace is None:
         workspace = gams.GamsWorkspace()
@@ -30,6 +30,7 @@ class GamsPandasDatabase:
     self.database = database
     self.gams2numpy = gams2numpy.Gams2Numpy(database.workspace.system_directory)
     self.auto_sort_index = auto_sort_index
+    self.sparse = sparse
     self.series = {}
 
   def __getattr__(self, item):
@@ -100,9 +101,11 @@ class GamsPandasDatabase:
     for identifier in args:
       setattr(builtins, identifier, self[identifier])
 
-  def get(self, *args):
+  def get(self, *args, sparse=None):
     """Retrieve any nymber of symbol names and return a list of their Pandas representations."""
-    return [self[i] for i in args]
+    if sparse is None:
+      sparse = self.sparse
+    return [self.getitem(i, sparse) for i in args]
 
   def add_parameter_from_dataframe(self, identifier, df, explanatory_text="", add_missing_domains=False,
                                    value_column_index=-1):
@@ -280,7 +283,11 @@ class GamsPandasDatabase:
       series = df[attribute].astype(float)
     else:
       assert all([i in self for i in index_names]), "Cannot get dense representation of series if sets are not included in database."
-      index = self.get_index([self[i] for i in index_names])
+      if len(index_names) > 1:
+        index = pd.MultiIndex.from_product([self[i] for i in index_names])
+      else:
+        index = self[index_names[0]]
+      index.names = index_names
       series = pd.Series(0.0, index=index)
       series = series + df[attribute]
     series.name = symbol.name
@@ -292,7 +299,10 @@ class GamsPandasDatabase:
   def series_from_parameter(self, symbol, sparse):
     return self.series_from_symbol(symbol, sparse, attributes=["value"], attribute="value")
 
-  def getitem(self, item, sparse=True):
+  def getitem(self, item, sparse=None):
+    if sparse is None:
+      sparse = self.sparse
+
     if item not in self.series:
       symbol = self.symbols[item]
 

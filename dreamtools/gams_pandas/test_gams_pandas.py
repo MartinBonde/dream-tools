@@ -286,3 +286,11 @@ def test_import_export_empty():
 
   assert all(db.p == 1)
   assert all(db.v == 1)
+
+def test_get_sparse():
+  db = dt.Gdx("test.gdx")
+  dense = dt.Gdx("test.gdx", sparse=False)
+  assert len(dense["qY"]) > len(db["qY"])
+  assert len(dense["qY"]) == len(pd.MultiIndex.from_product(db.get("s_", "t")))
+  assert len(dense["pBolig"]) == len(db["t"])
+

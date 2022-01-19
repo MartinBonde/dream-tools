@@ -8,7 +8,7 @@ from .gams_pandas import GamsPandasDatabase, logger
 class Gdx(GamsPandasDatabase):
   """Wrapper that opens a GDX file as a GamsPandasDatabase."""
 
-  def __init__(self, file_path, workspace=None):
+  def __init__(self, file_path, workspace=None, sparse=True):
     if not file_path:
       import easygui
       file_path = easygui.fileopenbox("Select reference gdx file", filetypes=["*.gdx"])
@@ -21,7 +21,7 @@ class Gdx(GamsPandasDatabase):
     if workspace is None:
       workspace = gams.GamsWorkspace()
     database = workspace.add_database_from_gdx(self.abs_path)
-    super().__init__(database)
+    super().__init__(database, sparse=sparse)
 
   def export(self, path=None, relative_path=True):
     """
