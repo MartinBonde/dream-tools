@@ -259,7 +259,7 @@ class GamsPandasDatabase:
       pass
     return t
 
-  def series_from_symbol(self, symbol, attributes, attribute):
+  def series_from_symbol(self, symbol, sparse, attributes, attribute):
     index_names = index_names_from_symbol(symbol)
     try:
       df = pd.DataFrame(
@@ -274,19 +274,25 @@ class GamsPandasDatabase:
     for i in index_names:
       df[i] = map_to_int_where_possible(df[i])
     df.set_index(index_names, inplace=True)
-    if len(df) == 0:
-      df.index = self.get_index([self[i] for i in index_names])[[]]  # Get the correct data types and size of index
-    series = df[attribute].astype(float)
+    if sparse:
+      if len(df) == 0:
+        df.index = self.get_index([self[i] for i in index_names])[[]]  # Get the correct data types and size of index
+      series = df[attribute].astype(float)
+    else:
+      assert all([i in self for i in index_names]), "Cannot get dense representation of series if sets are not included in database."
+      index = self.get_index([self[i] for i in index_names])
+      series = pd.Series(0.0, index=index)
+      series = series + df[attribute]
     series.name = symbol.name
     return series
 
-  def series_from_variable(self, symbol, attr="level"):
-    return self.series_from_symbol(symbol, attributes=["level", "marginal", "lower", "upper", "scale"], attribute="level")
+  def series_from_variable(self, symbol, sparse):
+    return self.series_from_symbol(symbol, sparse, attributes=["level", "marginal", "lower", "upper", "scale"], attribute="level")
 
-  def series_from_parameter(self, symbol):
-    return self.series_from_symbol(symbol, attributes=["value"], attribute="value")
+  def series_from_parameter(self, symbol, sparse):
+    return self.series_from_symbol(symbol, sparse, attributes=["value"], attribute="value")
 
-  def __getitem__(self, item):
+  def getitem(self, item, sparse=True):
     if item not in self.series:
       symbol = self.symbols[item]
 
@@ -297,7 +303,7 @@ class GamsPandasDatabase:
         if symbol_is_scalar(symbol):
           self.series[item] = symbol.find_record().level if len(symbol) else None
         else:
-          self.series[item] = self.series_from_variable(symbol)
+          self.series[item] = self.series_from_variable(symbol, sparse)
           if self.auto_sort_index:
             self.series[item] = self.series[item].sort_index()
 
@@ -305,14 +311,16 @@ class GamsPandasDatabase:
         if symbol_is_scalar(symbol):
           self.series[item] = symbol.find_record().value if len(symbol) else None
         else:
-          self.series[item] = self.series_from_parameter(symbol)
+          self.series[item] = self.series_from_parameter(symbol, sparse)
           if self.auto_sort_index:
             self.series[item] = self.series[item].sort_index()
 
       elif isinstance(symbol, gams.GamsEquation):
         return symbol
-
     return self.series[item]
+
+  def __getitem__(self, item):
+    return self.getitem(item)
 
   def __setitem__(self, name, value):
     if name in self.symbols:
