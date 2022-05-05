@@ -129,18 +129,14 @@ def dimension_changed(series, reference_database):
   if series.name in reference_database:
     is_changed = reference_database[series.name].index.nlevels != series.index.nlevels
     if is_changed:
-      Warning(
+      KeyError(
         f"The dimension of '{series.name}' is different in the reference database. If indexing a single element write [['element']] rather than ['element'] to prevent the series dimension being reduced.")
     return is_changed
   else:
-    Warning(f"'{series.name}' was not found in the reference database.")
+    KeyError(f"'{series.name}' was not found in the reference database.")
     return True
 
-
 def get_reference_database():
-  if dt.REFERENCE_DATABASE is None:
-    import easygui
-    dt.REFERENCE_DATABASE = dt.Gdx(easygui.fileopenbox("Select reference gdx file", filetypes=["*.gdx"]))
   return dt.REFERENCE_DATABASE
 
 def compare(iter_series, refs, operator):
@@ -194,10 +190,12 @@ def unstack_multiseries(series, keep_axis_index=-1):
   """
   if isinstance(series.index, pd.MultiIndex):
     series = series.copy()
+    keep_axis_name = series.index.names[keep_axis_index]
     if series.name is None:
       series.name = ""
     series.index = pd.MultiIndex.from_tuples(flatten_keys(series.name, keys, keep_axis_index) for keys in series.index)
     df = series.unstack(0)[series.index.get_level_values(0).unique()]
+    df.index.name = keep_axis_name
   else:
     df = pd.DataFrame(series)
   return df

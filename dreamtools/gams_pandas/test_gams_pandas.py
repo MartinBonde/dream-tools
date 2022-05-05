@@ -279,8 +279,10 @@ def test_import_export_empty():
   db.export("test_export.gdx")
   db = dt.Gdx("test_export.gdx")
 
-  db.p.loc[t, s] = 1
-  db.v.loc[t, s] = 1
+  for i in s:
+    for j in t:
+      db.p.loc[i, j] = 1
+      db.v.loc[i, j] = 1
   db.export("test_export.gdx")
   db = dt.Gdx("test_export.gdx")
 
