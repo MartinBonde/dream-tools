@@ -132,7 +132,6 @@ import sys
 import os
 import shutil
 import subprocess
-import signal
 import pickle
 import re
 from math import ceil, floor
@@ -142,9 +141,10 @@ from timeit import default_timer as timer
 import itertools # Useful in FOR loops in MAKRO
 
 # gamY data objects
-from ..gamY.classes import Variable, Equation, Function, MockMatch, Group, Block, CaseInsensitiveDict
+from classes import Variable, Equation, Function, MockMatch, Group, Block, CaseInsensitiveDict
+
 #  The regex patterns used to match commands
-from ..gamY.patterns import PATTERNS
+from patterns import PATTERNS
 
 
 class Precompiler:
@@ -804,7 +804,7 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
         else:
           replacement_text += var.name + L + var.sets + " = " + level + ";\n"
 
-    replacement_text += "$onlisting"
+    replacement_text += "$onlisting\n"
 
     GROUPS[group_name] = new_group
     GROUPS["all"] = Group(new_group, **GROUPS["all"])
@@ -1214,7 +1214,7 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
         replacement_text += "{var.name}.lo{var.sets}{conditions} = {lower_bound};\n".format(**locals())
         replacement_text += "{var.name}.up{var.sets}{conditions} = {upper_bound};\n".format(**locals())
 
-    replacement_text += "$onlisting"
+    replacement_text += "$onlisting\n"
     return replacement_text
 
 
@@ -1352,16 +1352,11 @@ def cmd_call():
     "pageWidth=9999",
   ]
   call_parameters += [arg for arg in args[2:] if (arg[:5] != "gams=")]
-
   process = subprocess.Popen(
     [gams_path, new_file, *call_parameters],
     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
     universal_newlines=True, shell=True
   )
-
-  def signal_handler(sig, frame):
-    process.send_signal(sig)
-  signal.signal(signal.SIGINT, signal_handler)
 
   while process.poll() is None:
     for line in iter(process.stdout.readline, ""):
@@ -1394,3 +1389,129 @@ def cmd_call():
 
 if __name__ == "__main__":
   cmd_call()
+
+def py_call(args):
+  start_time = timer()
+
+  # Read any execution paremeters
+  if len(args) < 2 or args[1][-4:] != ".gms":
+    raise ValueError("No .gms file specified")
+  else:
+    file_path = args[1]
+
+  precompiler = Precompiler(file_path, add_adjust=None, mult_adjust=None)
+
+  # Read optional command line arguments
+  save_file, gams_path = None, None
+  for arg in args:
+    #  Read blocks, groups, and variables from saved file if the r=<file_path> option is used.
+    if arg[:2] == "r=":
+      precompiler.read(arg[2:])
+
+    #  Save definitions if s=<file_path> is used
+    elif arg[:2] == "s=":
+      save_file = arg[2:]
+
+    #  Transfer command line parameters to data structure
+    elif arg[:2] == "--":
+      assert "=" in arg[2:], f"'{arg}' command line parameter starts with '--' but does not contain a '=' symbol."
+      k, v = arg[2:].split(sep="=")
+      precompiler.locals[k] = v
+
+    #  Get gams from command line arguments
+    elif arg[:5].lower() == "gams=":
+      gams_path = arg[5:]
+
+  #  Find GAMS program if it was not set as command line argument
+  if not gams_path:
+    if "GAMS" in os.environ:
+      gams_path = os.environ["GAMS"]
+    else:
+      gams_path = shutil.which("GAMS")
+    if not gams_path:
+      sys.exit("ERROR: gamY could not not find GAMS. Set GAMS path as environmental variable with variable name GAMS")
+  else:
+    #  Clean path for common errors
+    while gams_path[0] in ["'",'"'," "]:
+      gams_path = gams_path[1:]
+    while gams_path[-1] in ["'",'"'," "]:
+      gams_path = gams_path[:-1]
+    if gams_path[-4:] != ".exe":
+      sys.exit("ERROR: " + gams_path + " is not an executable file. Make sure GAMS path is correctly set.")
+
+  #  Parse file using recursive descent
+  text = precompiler()
+
+  if save_file: # Save gamY data structure if gamY is called with s= argument
+    precompiler.save(save_file)
+
+  #  Save pre-compiled GAMS file in 'Expanded' folder
+  expanded_dir = os.path.join(precompiler.file_dir, "Expanded")
+  if not os.path.exists(expanded_dir):
+    os.makedirs(expanded_dir)
+  new_file = os.path.join(expanded_dir, precompiler.file_name.replace(".gms", ".gmy"))
+  with open(new_file, 'w') as f:
+    f.write(text)
+
+  compilation_time = timer() - start_time
+
+  #  Run file using GAMS (path needs to be set for system or user)
+  prev_line = ""
+  call_parameters = [
+    "LO=3",
+    "Workdir=" + precompiler.file_dir,
+    "CurDir=" + precompiler.file_dir,
+    "ErrMsg=1",
+    "O=" + precompiler.list_file_path,
+    "pageSize=0",
+    "pageWidth=9999",
+  ]
+  call_parameters += [arg for arg in args[2:] if (arg[:5] != "gams=")]
+  process = subprocess.Popen(
+    [gams_path, new_file, *call_parameters],
+    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+    universal_newlines=True, shell=True
+  )
+
+  while process.poll() is None:
+    for line in iter(process.stdout.readline, ""):
+      if not (line[:3] == "---" and prev_line[:10] == line[:10]):  # For almost identical lines, only print the last one
+        sys.stdout.write(prev_line)
+        sys.stdout.flush()
+      prev_line = line
+  sys.stdout.write(prev_line)
+  sys.stdout.flush()
+
+#  Print errors and messages from listing file (lines starting with ****)
+  error_pattern = re.compile(r"^(\*{4}.+)", re.MULTILINE)
+  model_pattern = re.compile(r"(?<=Model Statistics    SOLVE |Model Analysis      SOLVE )\S+", re.MULTILINE)
+  with open(precompiler.list_file_path, 'r') as f:
+    for line in f:
+      if error_pattern.match(line):
+        print(error_pattern.match(line).group(0))
+      elif model_pattern.search(line):
+        print("")
+        print(model_pattern.search(line).group(0))
+
+  execution_time = timer() - start_time - compilation_time
+  print("Precompiler time: %.2f seconds" % compilation_time)
+  print("Execution time: %.2f seconds" % execution_time)
+  print("Total run time: %.2f seconds" % (execution_time + compilation_time))
+  #  print("Return code: %i" % process.returncode)
+
+def gams_error(gams_file,check_error=False):
+    print('Error messages for ' + gams_file)
+    lst_path = "LST\\" + gams_file[:-4] + ".lst"
+    lst = open(lst_path, mode='r')
+    content = lst.readlines()
+    for i in range(len(content)):
+        current_str = content[i]
+        if '****' in current_str:
+            print(current_str)
+        if check_error:
+            errors = ['**** USER ERROR(S) ENCOUNTERED','** Infeasible solution to a square system',
+                      'Locally Infeasible','Terminated By Solver', "*** Status: Execution error(s)",
+                      'ERRORS ( ****)','**** ERRORS/WARNINGS IN EQUATION','Domain error(s)']
+            error_flag = any(x in current_str for x in errors)
+            assert error_flag==False
+    lst.close()

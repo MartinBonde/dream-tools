@@ -3,8 +3,9 @@ import logging
 
 from dreamtools import unstack_multiseries
 
-from dreamtools.gams_pandas import Gdx
+from dreamtools.gams_pandas import Gdx, gams_pandas
 import os
+import pandas as pd
 
 
 logger = logging.getLogger(__name__)
@@ -90,3 +91,29 @@ def parse_domain(gdx, domain):
 #   # return str(gams.GamsWorkspace(system_directory="C:\\GAMS\\win64\\28.2", debug=3))
 #   # return str(gams.GamsWorkspace())
 #   return(str(x))
+
+
+def gdx_to_xlsx(gdx_input_path,excel_output_path):
+
+  """
+  Import .gdx file and Expor as Excel sheet 
+  """
+  # Inputs (str): gdx_input_path - local path to .gdx file, excel_output_path - local path to export .xlsx file.
+
+  db = Gdx(gdx_input_path)
+
+  sets2dataframes = {}
+  for var_name in db.variables:
+      var = db[var_name]
+      if gams_pandas.is_iterable(var):
+          sets = ",".join(var.index.names)
+      else:
+          sets = "scalar"
+          var = [var]
+      if sets not in sets2dataframes:
+          sets2dataframes[sets] = pd.DataFrame()
+      sets2dataframes[sets][var_name] = var
+
+  with pd.ExcelWriter(excel_output_path) as writer:
+      for sets, df in sets2dataframes.items():
+          df.to_excel(writer, sheet_name=sets)
