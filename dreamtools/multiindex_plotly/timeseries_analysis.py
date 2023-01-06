@@ -4,6 +4,13 @@ import pandas as pd
 from IPython.display import display
 
 
+def get_reference_database(s=None):
+  """Get baseline database associated with a GamsPandasDatabase. Defaults to dt.REFERENCE_DATABASE."""
+  try:
+      return s.reference_database
+  except AttributeError:
+      return dt.REFERENCE_DATABASE
+
 def time(start, end=None):
   """Set global time settings."""
   if end is None:
@@ -12,15 +19,18 @@ def time(start, end=None):
   dt.END_YEAR = end
 
 def years():
+  """Return list of years in current time settings."""
   return list(range(dt.START_YEAR, dt.END_YEAR+1))
 
 def aggregate_index(index, default_set_aggregations):
+  """Aggregate index levels according to default_set_aggregations."""
   if index.nlevels > 1:
     return tuple(default_set_aggregations.get(k, list(index.levels[i])) for i, k in enumerate(index.names))
   else:
     return default_set_aggregations.get(index.name, list(index))
 
 def aggregate_series(series, default_set_aggregations=None, reference_database=None):
+  """Aggregate series according to default_set_aggregations, using reference_database to check if indices have been specified."""
   if default_set_aggregations is None:
     default_set_aggregations = dt.DEFAULT_SET_AGGREGATIONS
 
@@ -36,17 +46,20 @@ def aggregate_series(series, default_set_aggregations=None, reference_database=N
 
   return series
 
-def prt(iter_series,
-        operator=None,
-        start_year=None,
-        end_year=None,
-        reference_database=None,
-        default_set_aggregations=None,
-        function=None,
-        names=None,
-        dec=6,
-        max_rows=100,
-        max_columns=20,):
+def prt(
+  iter_series,
+  operator=None,
+  start_year=None,
+  end_year=None,
+  reference_database=None,
+  default_set_aggregations=None,
+  function=None,
+  names=None,
+  dec=6,
+  max_rows=100,
+  max_columns=20,
+):
+  """Print a table of a series or list of series."""
   df = to_dataframe(iter_series, operator, start_year, end_year, reference_database, default_set_aggregations, function)
   if names:
     df.columns = names
@@ -66,17 +79,19 @@ def add_xline(fig, x):
     opacity=0.3,
   )])
 
-def plot(iter_series,
-         operator=None,
-         start_year=None,
-         end_year=None,
-         reference_database=None,
-         default_set_aggregations=None,
-         function=None,
-         names=None,
-         xline=None,
-         layout={},
-         **kwargs):
+def plot(
+  iter_series,
+  operator=None,
+  start_year=None,
+  end_year=None,
+  reference_database=None,
+  default_set_aggregations=None,
+  function=None,
+  names=None,
+  xline=None,
+  layout={},
+  **kwargs
+):
   df = to_dataframe(iter_series, operator, start_year, end_year, reference_database, default_set_aggregations, function)
   if names:
     df.columns = names
@@ -92,13 +107,15 @@ def plot(iter_series,
     fig = add_xline(fig, xline)
   return fig
 
-def to_dataframe(iter_series,
-                 operator=None,
-                 start_year=None,
-                 end_year=None,
-                 reference_database=None,
-                 default_set_aggregations=None,
-                 function=None):
+def to_dataframe(
+  iter_series,
+  operator=None,
+  start_year=None,
+  end_year=None,
+  reference_database=None,
+  default_set_aggregations=None,
+  function=None
+):
   if isinstance(iter_series, pd.Series):
     iter_series = [iter_series]
 
@@ -116,13 +133,17 @@ def to_dataframe(iter_series,
             for i, s in enumerate(iter_series)]
     iter_series = compare(iter_series, refs, operator)
 
-  df = merge_multiseries(*iter_series)
-  if "t" in df.index.names:
-    if start_year is None:
-      start_year = dt.START_YEAR
-    if end_year is None:
-      end_year = dt.END_YEAR
-    df = df.loc[start_year:end_year]
+  try:
+    keep_axis_index = iter_series[0].index.names.index("t")
+  except ValueError:
+    keep_axis_index = -1 # Default to last index level if no level named "t" is found
+ 
+  df = merge_multiseries(*iter_series, keep_axis_index=keep_axis_index)
+  if start_year is None:
+    start_year = dt.START_YEAR
+  if end_year is None:
+    end_year = dt.END_YEAR
+  df = df.loc[start_year:end_year]
   return df
 
 def dimension_changed(series, reference_database):
@@ -135,9 +156,6 @@ def dimension_changed(series, reference_database):
   else:
     KeyError(f"'{series.name}' was not found in the reference database.")
     return True
-
-def get_reference_database():
-  return dt.REFERENCE_DATABASE
 
 def compare(iter_series, refs, operator):
   """
@@ -201,7 +219,7 @@ def unstack_multiseries(series, keep_axis_index=-1):
   return df
 
 def flatten_keys(name, keys, keep_axis_index):
-  keys_str = ','.join(map(str, keys[:keep_axis_index:]))
+  keys_str = ','.join(map(str, [keys[i] for i, _ in enumerate(keys) if i != keep_axis_index]))
   flat_name = f"{name}[{keys_str}]"
   return flat_name, keys[keep_axis_index]
 
