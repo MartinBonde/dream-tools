@@ -16,6 +16,3 @@ if PLOTLY:
   from .dream_plotly_template import dream_template
   pio.templates["dream"] = dream_template
   pio.templates.default = "dream"
-
-  import dreamtools as dt
-  pio.orca.config.default_scale = dt.PLOT_SCALE
