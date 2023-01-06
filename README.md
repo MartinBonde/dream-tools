@@ -16,6 +16,3 @@ DREAM-tools contains a number of plotting features based on [plotly](https://plo
 ## gamY
 A pre-processor for GAMS files implementing a number of additional features.
 
-
-## Gekko
-A script is included to endogenize or exogenize variables in GAMS from [Gekko Timeseries and Modeling Software](http://t-t.dk/gekko/).
