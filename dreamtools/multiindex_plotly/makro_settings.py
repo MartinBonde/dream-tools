@@ -14,8 +14,10 @@ DEFAULT_SET_AGGREGATIONS = {
 	"s_": ['tot',],
 	"sp": ['tje', 'fre', 'byg', 'soe', 'bol', 'lan', 'ene', 'udv'],
 	"s" : ['tje', 'fre', 'byg', 'soe', 'bol', 'lan', 'ene', 'udv', 'off'],
-	"r_": ['rTot',],
+	"r_": ['tot',],
 	"r" : ['tje', 'fre', 'byg', 'soe', 'bol', 'lan', 'ene', 'udv', 'off'],
+
+	"d_": ['tot',],
 
 	"i_": ['iTot',],
 	"i" : ['IM', 'IB', 'IL'],
@@ -23,10 +25,8 @@ DEFAULT_SET_AGGREGATIONS = {
 	"k_": ['IM', 'IB'],
 	"k" : ['IM', 'IB'],
 
-  "portf_": ['NetFin',],
+    "portf_": ['NetFin',],
 	"portf": ['NetFin', ],
-
-	"scen_": ['GovSpending', 'IntRate', 'ForeignDemand'],
 }
 
 AGE_AXIS_TITLE = "Alder"
