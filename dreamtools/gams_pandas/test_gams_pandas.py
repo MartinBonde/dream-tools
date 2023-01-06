@@ -296,3 +296,8 @@ def test_get_sparse():
   assert len(dense["qY"]) == len(pd.MultiIndex.from_product(db.get("s_", "t")))
   assert len(dense["pBolig"]) == len(db["t"])
 
+def test_time_index_pos():
+  db = dt.Gdx("test.gdx")
+  p = db.create_parameter("p", [db.s_, db.s, db.t], data=0)
+  p_inv_sets = db.create_parameter("p_inv_sets", [db.t, db.s, db.s_], data=0)
+  assert dt.to_dataframe(p[:,'tje',:]).size == dt.to_dataframe(p_inv_sets[:,'tje',:]).size
