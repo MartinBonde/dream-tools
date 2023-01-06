@@ -1,5 +1,6 @@
 import setuptools
 import sys
+import os
 sys.path.insert(0, os.getcwd())
 from dreamtools import __version__
 
