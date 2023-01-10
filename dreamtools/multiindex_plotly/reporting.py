@@ -7,55 +7,86 @@ import pandas as pd
 
 import dreamtools as dt
 
-def small_figure(fig):
-    "Adjust figure with settings suitable for side by side use in the Office suite"
-    legend_height = 200 / dt.PLOT_SCALE + len(fig.data) * 64 / dt.PLOT_SCALE
-    width, height = dt.SMALL_PLOT_WIDTH / dt.PLOT_SCALE, dt.PLOT_HEIGHT / dt.PLOT_SCALE
-    fig = go.Figure(fig).update_layout(
-        width = width,
-        height = height + legend_height,
-        legend_y = - 200 / dt.PLOT_HEIGHT,
-        legend_yanchor = "top",
-        legend_orientation = "v",
-        margin = {"t": 20, "b": legend_height, "l": 60, "r": 10},
+def plot(
+  iter_series,
+  operator=None,
+  function=None,
+  names=None,
+  start_year=None,
+  end_year=None,
+  reference_database=None,
+  default_set_aggregations=None,
+  **kwargs
+):
+  """Shorthand for DataFrame(...).plot(...)"""
+  dataframe = dt.DataFrame(iter_series, operator, function, names, start_year, end_year, reference_database, default_set_aggregations)
+  return dataframe.plot(**kwargs)
 
-        # Title is used as y-axis label
-        yaxis_title_text = "",
-        title_text = fig.layout.yaxis.title.text,
-        title_xanchor = "left", title_x = 0,
-        title_yanchor = "top", title_y = 1,
-        title_pad_l = 7, title_pad_t = 7,
-        title_font_size = 14,
-    )
-    if  max(len(i.name) for i in fig.data) > 30:  # Long legend entries cause the plot area size to change when centered
-        fig.update_layout(legend_x = 0, legend_xanchor = "left")
-    return fig
+def prt(
+  iter_series,
+  operator=None,
+  function=None,
+  names=None,
+  start_year=None,
+  end_year=None,
+  reference_database=None,
+  default_set_aggregations=None,
+  dec=6,
+  max_rows=100,
+  max_columns=20,
+):
+  """Print a table of a series or list of series."""
+  df = dt.DataFrame(iter_series, operator, function, names, start_year, end_year, reference_database, default_set_aggregations)
+  df.style.set_properties(**{"text-align": "right", "precision": dec})
+  with pd.option_context('display.max_rows', max_rows, 'display.max_columns', max_columns):  # more options can be specified also
+    display(df)
+
+def _figure(fig, width=None, height=None, legend_height=None, **kwargs):
+  """
+  Layout changes shared by specialized small_figure and large_figure functions.
+  """
+  if legend_height is not None:
+     height += legend_height
+
+  fig = go.Figure(fig).update_layout(
+    width = width,
+    height = height,
+    legend_y = - 200 / dt.PLOT_HEIGHT,
+    legend_yanchor = "top",
+    legend_orientation = "v",
+    margin = {"t": 20, "b": legend_height, "l": 60, "r": 10},
+
+    # Title is used as y-axis label
+    yaxis_title_text = "",
+    title_text = fig.layout.yaxis.title.text,
+    title_xanchor = "left", title_x = 0,
+    title_yanchor = "top", title_y = 1,
+    title_pad_l = 7, title_pad_t = 7,
+    title_font_size = 14,
+  )
+
+  return fig
+
+def small_figure(fig):
+  "Adjust figure with settings suitable for side by side use in the Office suite"
+  legend_height = 200 / dt.PLOT_SCALE + len(fig.data) * 64 / dt.PLOT_SCALE
+  width, height = dt.SMALL_PLOT_WIDTH / dt.PLOT_SCALE, dt.PLOT_HEIGHT / dt.PLOT_SCALE
+  fig = _figure(fig, width, height, legend_height)
+  if max(len(i.name) for i in fig.data) > 30:  # Long legend entries cause the plot area size to change when centered
+    fig.update_layout(legend_x = 0, legend_xanchor = "left")
+  return fig
 
 def large_figure(fig):
-    "Adjust figure with settings suitable for use in the Office suite"
-    trace_count = len(fig.data)
-    col_count = 2
-    row_count = trace_count // col_count
-    for i, trace in enumerate(fig.data):
-        trace.legendgroup = i // (trace_count / col_count)
-    legend_height = 200 / dt.PLOT_SCALE + row_count * 64 / dt.PLOT_SCALE
-    width, height = dt.LARGE_PLOT_WIDTH / dt.PLOT_SCALE, dt.PLOT_HEIGHT / dt.PLOT_SCALE
-    fig = go.Figure(fig).update_layout(
-        width = width,
-        height = height + legend_height,
-        legend_y = - 200 / dt.PLOT_HEIGHT,
-        legend_yanchor = "top",
-        margin = {"t": 20, "b": legend_height, "l": 60, "r": 10},
-
-        # Title is used as y-axis label
-        yaxis_title_text="",
-        title_text=fig.layout.yaxis.title.text,
-        title_xanchor="left", title_x=0,
-        title_yanchor="top", title_y=1,
-        title_pad_l=7, title_pad_t=7,
-        title_font_size=14,
-    )
-    return fig
+  "Adjust figure with settings suitable for use in the Office suite"
+  trace_count = len(fig.data)
+  col_count = 2
+  row_count = trace_count // col_count
+  for i, trace in enumerate(fig.data):
+      trace.legendgroup = i // (trace_count / col_count)
+  legend_height = 200 / dt.PLOT_SCALE + row_count * 64 / dt.PLOT_SCALE
+  width, height = dt.LARGE_PLOT_WIDTH / dt.PLOT_SCALE, dt.PLOT_HEIGHT / dt.PLOT_SCALE
+  fig = _figure(fig, width, height, legend_height)
+  return fig
 
 def figures_to_html(figs, filename="figures.html"):
   """Write an iter of plotly figures to an html file."""
@@ -73,11 +104,12 @@ def figures_to_html(figs, filename="figures.html"):
 def subplot(figures, cols=2, **kwargs):
   """Create subplot from iter of figures."""
   rows = ceil(len(figures) / cols)
-  fig = make_subplots(rows=rows,
-                      cols=cols,
-                      subplot_titles=[f["layout"]["title"]["text"] for f in figures],
-                      **kwargs
-                      )
+  fig = make_subplots(
+    rows=rows,
+    cols=cols,
+    subplot_titles=[f["layout"]["title"]["text"] for f in figures],
+    **kwargs
+  )
   for i, f in enumerate(figures):
     for trace in f["data"]:
       fig.add_trace(trace, row=ceil((i+1)/cols), col=1 + i % cols)

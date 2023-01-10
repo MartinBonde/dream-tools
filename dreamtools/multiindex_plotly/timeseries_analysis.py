@@ -4,7 +4,6 @@ import pandas as pd
 from IPython.display import display
 from inspect import signature
 
-
 def get_reference_database(s=None):
   """Get baseline database associated with a GamsPandasDatabase. Defaults to dt.REFERENCE_DATABASE."""
   if isinstance(s, dt.GamsPandasDatabase) and s.reference_database is not None:
@@ -42,24 +41,33 @@ def aggregate_series(series, default_set_aggregations=None):
 
   return aggregated
 
-def prt(
-  iter_series,
-  operator=None,
-  function=None,
-  names=None,
-  start_year=None,
-  end_year=None,
-  reference_database=None,
-  default_set_aggregations=None,
-  dec=6,
-  max_rows=100,
-  max_columns=20,
-):
-  """Print a table of a series or list of series."""
-  df = to_dataframe(iter_series, operator, function, names, start_year, end_year, reference_database, default_set_aggregations)
-  df.style.set_properties(**{"text-align": "right", "precision": dec})
-  with pd.option_context('display.max_rows', max_rows, 'display.max_columns', max_columns):  # more options can be specified also
-    display(df)
+def map_with_baseline(function, data, baselines):
+  """Map function to data, passing baselines if function takes two arguments."""
+  if len(signature(function).parameters) == 2:
+    return map(function, data, baselines)
+  else:
+    return map(function, data)
+
+class _DataFrame(pd.DataFrame):
+  """Pandas DataFrame with additional attributes for plotly layout."""
+
+  _internal_names = pd.DataFrame._internal_names + ["layout"]
+  _internal_names_set = set(_internal_names)
+
+  @property
+  def _constructor(self):
+      return _DataFrame
+
+  def plot(self, layout={}, xline=None, **kwargs):
+    """Plot DataFrame using plotly."""
+    fig = super().plot(**kwargs)
+
+    fig.update_layout({**self.layout, **layout})
+
+    if xline is not None:
+      fig = add_xline(fig, xline)
+
+    return fig
 
 def add_xline(fig, x):
   "Add a vertical line to a plotly figure at x"
@@ -73,40 +81,7 @@ def add_xline(fig, x):
     opacity=0.3,
   )])
 
-def plot(
-  iter_series,
-  operator=None,
-  function=None,
-  names=None,
-  start_year=None,
-  end_year=None,
-  reference_database=None,
-  default_set_aggregations=None,
-  xline=None,
-  layout={},
-  **kwargs
-):
-  df = to_dataframe(iter_series, operator, function, names, start_year, end_year, reference_database, default_set_aggregations)
-  fig = df.plot(**kwargs)
-  layout = {
-    "yaxis_title_text": dt.YAXIS_TITLE_FROM_OPERATOR.get(operator, ""),
-    "xaxis_title_text": dt.TIME_AXIS_TITLE,
-    "legend_title_text": "",
-    **layout
-  }
-  fig.update_layout(layout)
-  if xline is not None:
-    fig = add_xline(fig, xline)
-  return fig
-
-def map_with_baseline(function, data, baselines):
-  """Map function to data, passing baselines if function takes two arguments."""
-  if len(signature(function).parameters) == 2:
-    return map(function, data, baselines)
-  else:
-    return map(function, data)
-
-def to_dataframe(
+def DataFrame(
   data,
   operator=None,
   function=None,
@@ -156,6 +131,15 @@ def to_dataframe(
 
   if names:
     df.columns = names
+
+  df = _DataFrame(df)
+
+  # Set default layout for plotly which depends on the operator
+  df.layout = {
+    "yaxis_title_text": dt.YAXIS_TITLE_FROM_OPERATOR.get(operator, ""),
+    "xaxis_title_text": dt.TIME_AXIS_TITLE,
+    "legend_title_text": "",
+  }
 
   return df
 

@@ -302,20 +302,20 @@ def test_time_index_pos():
   db = dt.Gdx("test.gdx")
   p = db.create_parameter("p", [db.s_, db.s, db.t], data=0)
   p_inv_sets = db.create_parameter("p_inv_sets", [db.t, db.s, db.s_], data=0)
-  assert dt.to_dataframe(p[:,'tje',:]).size == dt.to_dataframe(p_inv_sets[:,'tje',:]).size
+  assert dt.DataFrame(p[:,'tje',:]).size == dt.DataFrame(p_inv_sets[:,'tje',:]).size
 
 def test_aggregation_with_2_sets():
   db = dt.Gdx("test.gdx")
   p = db.create_parameter("p", [db.a_, db.portf_, db.t], data=0)
-  assert dt.to_dataframe(p).columns[0] == "p[tot,NetFin]"
+  assert dt.DataFrame(p).columns[0] == "p[tot,NetFin]"
 
 def test_compare():
   db = dt.Gdx("test.gdx")
   with pytest.raises(ValueError):
-    dt.to_dataframe(db.qBNP, "q")
+    dt.DataFrame(db.qBNP, "q")
   baseline = dt.REFERENCE_DATABASE = dt.Gdx("test.gdx")
   db.qBNP *= 1.01
-  q = dt.to_dataframe(db.qBNP, "q", start_year=2025)
-  m = dt.to_dataframe(db.qBNP, "m", start_year=2025)
+  q = dt.DataFrame(db.qBNP, "q", start_year=2025)
+  m = dt.DataFrame(db.qBNP, "m", start_year=2025)
   assert approximately_equal(q, 0.01).all().all()
   assert ((15 < m) & (m < 25)).all().all()
