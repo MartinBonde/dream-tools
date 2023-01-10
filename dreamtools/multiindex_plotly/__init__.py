@@ -8,7 +8,6 @@ if PLOTLY:
   import pandas
   pandas.options.plotting.backend = "plotly"
   from .timeseries_analysis import *
-  from .plotly_util import *
   from .reporting import *
   from .age_plot import *
 
