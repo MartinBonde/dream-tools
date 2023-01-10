@@ -44,9 +44,9 @@ def aggregate_series(series, default_set_aggregations=None):
 def map_with_baseline(function, data, baselines):
   """Map function to data, passing baselines if function takes two arguments."""
   if len(signature(function).parameters) == 2:
-    return map(function, data, baselines)
+    return list(map(function, data, baselines))
   else:
-    return map(function, data)
+    return list(map(function, data))
 
 class _DataFrame(pd.DataFrame):
   """Pandas DataFrame with additional attributes for plotly layout."""
@@ -105,7 +105,7 @@ def DataFrame(
 
   results = map_with_baseline(function, data, baselines)
 
-  if operator is not None:
+  if operator:
     if None in baselines:
       raise ValueError("Cannot compare with baseline if no reference database is set.")
     if isinstance(data[0], pd.Series):

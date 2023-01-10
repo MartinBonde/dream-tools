@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import dreamtools as dt
 
-def test_to_dataframe_with_series():
+def test_DataFrame_with_series():
   dt.REFERENCE_DATABASE = dt.Gdx("test.gdx")
   s = dt.Gdx("test.gdx")
   dt.time(2025, 2040)
@@ -16,13 +16,14 @@ def test_to_dataframe_with_series():
   assert dt.DataFrame(s.qY).shape == (16, 1)
   assert dt.DataFrame(s.qY[s.s]).shape == (16, 9)
   assert dt.DataFrame(s.qY[s.s], "q").shape == (16, 9)
+  assert dt.DataFrame(s.qY[s.s], "s").shape == (16, 9*2)
   s.foo = s.qY.loc[s.sp]
   s.foo.name = "foo"
   assert dt.DataFrame(s.foo).shape == (16, 8)
   with pytest.raises(KeyError):
     dt.DataFrame(s.foo, "q")
 
-def test_to_dataframe_with_database():
+def test_DataFrame_with_database():
   dt.REFERENCE_DATABASE = dt.Gdx("test.gdx")
   s = dt.Gdx("test.gdx")
   dt.time(2025, 2040)
@@ -32,7 +33,7 @@ def test_to_dataframe_with_database():
   assert dt.DataFrame(s, "q", lambda s: s.qY[s.s]).shape == (16, 9)
   assert dt.DataFrame(s, "q", lambda s: s.pY[s.s] * s.qY[s.s]).shape == (16, 9)
   
-def test_to_dataframe_with_multiple_baselines():
+def test_DataFrame_with_multiple_baselines():
   b1 = dt.Gdx("test.gdx")
   b2 = dt.Gdx("test.gdx")
   s1 = dt.Gdx("test.gdx")
