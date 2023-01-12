@@ -194,7 +194,7 @@ class GamsPandasDatabase:
     index.explanatory_text = explanatory_text
 
     if texts is None:
-      texts = map_lowest_level(str, index)
+      texts = [str(i) for i in index]
     index.texts = pd.Series(texts, index=index)
     index.texts.name = index.name
 

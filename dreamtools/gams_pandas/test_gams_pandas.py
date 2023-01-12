@@ -242,6 +242,7 @@ def test_create_methods():
   t = Set("t", range(2000, 2021), "Årstal")
   s = Set("s", ["tjenester", "fremstilling"], "Brancher", ["Tjenester", "Fremstilling"])
   st = Set("st", [s, t], "Branche x år dummy")
+
   sub = Set("sub", ["tjenester"], "Subset af brancher", domains=["s"])
 
   one2one = Set("one2one", [(2010, 2015), (2011, 2016)], "1 til 1 mapping", domains=["t", "t"])
@@ -264,6 +265,9 @@ def test_create_methods():
   assert all(fq.loc[2010:2011] == [1, 1.01])
   assert pd.isna(d["tjenester",2010])
   assert pd.isna(y["tjenester",2010])
+
+  # Test that created symbols can be exported
+  db.export("test_export.gdx")
 
 def test_import_export_empty():
   # Create empty GamsPandasDatabase and alias creation methods
