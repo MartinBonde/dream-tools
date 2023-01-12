@@ -43,11 +43,12 @@ def prt(
     display(df)
 
 def write_image(fig, file_name, scale=3):
-  from PIL import Image
   fig.write_image(file_name, scale=scale)
-  with Image.open(file_name) as img:
-    sleep(0.01)
-    img.save(file_name, dpi=(96 * scale, 96 * scale))
+  if file_name.endswith(".png"):
+    from PIL import Image
+    with Image.open(file_name) as img:
+      sleep(0.01)
+      img.save(file_name, dpi=(96 * scale, 96 * scale))
 
 def figures_to_html(figs, filename="figures.html"):
   """Write an iter of plotly figures to an html file."""
