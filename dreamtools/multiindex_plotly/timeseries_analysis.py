@@ -48,6 +48,7 @@ def map_with_baseline(function, data, baselines):
   else:
     return list(map(function, data))
 
+@pd.api.extensions.register_dataframe_accessor("dt")
 class _DataFrame(pd.DataFrame):
   """Pandas DataFrame with additional attributes for plotly layout."""
 
@@ -58,16 +59,56 @@ class _DataFrame(pd.DataFrame):
   def _constructor(self):
       return _DataFrame
 
-  def plot(self, layout={}, xline=None, **kwargs):
+  def plot(self, layout={}, xline=None, vertical_legend=True, horizontal_yaxis_title=True, small_figure=False, **kwargs):
     """Plot DataFrame using plotly."""
-    fig = super().plot(**kwargs)
+    fig = pd.DataFrame.plot(self, **kwargs)()
 
-    fig.update_layout({**self.layout, **layout})
+    fig.update_layout(**self.layout)
 
     if xline is not None:
       fig = add_xline(fig, xline)
 
+    if vertical_legend:
+      fig = dt.vertical_legend(fig)
+
+    if small_figure:
+      fig.update_layout(**dt.small_figure_layout)
+    else:
+      fig.update_layout(**dt.large_figure_layout)
+
+    if horizontal_yaxis_title:
+      fig = dt.horizontal_yaxis_title(fig)
+
+    fig.update_layout(**layout)
+
     return fig
+
+def horizontal_yaxis_title(fig, text=None):
+  """
+  Update plotly figure to make the y-axis horizontal using annotations
+  """
+  if text is None:
+    text = fig.layout.yaxis.title.text
+  return fig.update_layout(
+    yaxis_title_text = "",
+    annotations = [
+      dict(
+        x = 0, xshift = - 0.8 * fig.layout.margin.l, xref = "paper",
+        y = 1, yshift = 0.8 * fig.layout.margin.t, yref = "paper",     
+        text = text,
+        showarrow = False,
+      )
+    ]
+  )
+
+def vertical_legend(fig, col_count=2):
+  """
+  Update plotly figure by splitting legend into <col_count> columns.
+  """
+  trace_count = len(fig.data)
+  for i, trace in enumerate(fig.data):
+    trace.legendgroup = i // (trace_count / col_count)
+  return fig
 
 def add_xline(fig, x):
   "Add a vertical line to a plotly figure at x"
@@ -118,9 +159,9 @@ def DataFrame(
   aggregated = [aggregate_series(s, default_set_aggregations) for s in results]
 
   try:
-    keep_axis_index = aggregated[0].index.names.index("t")
+    keep_axis_index = aggregated[0].index.names.index(dt.X_AXIS_NAME)
   except ValueError:
-    keep_axis_index = -1 # Default to last index level if no level named "t" is found
+    keep_axis_index = dt.X_AXIS_INDEX # Default if no level named dt.X_AXIS_NAME is found
  
   df = merge_multiseries(*aggregated, keep_axis_index=keep_axis_index)
   if start_year is None:

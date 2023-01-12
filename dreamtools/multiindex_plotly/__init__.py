@@ -1,6 +1,6 @@
-PLOTLY = True
 try:
   import plotly
+  PLOTLY = True
 except ImportError:
   PLOTLY = False
 
@@ -15,3 +15,5 @@ if PLOTLY:
   from .dream_plotly_template import dream_template
   pio.templates["dream"] = dream_template
   pio.templates.default = "dream"
+
+  from .dream_plotly_template import dream_colors_rgb, small_figure_layout, large_figure_layout

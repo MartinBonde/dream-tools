@@ -1,17 +1,17 @@
 import plotly.graph_objects as go
 
-dream_colors_rgb = [
-  "rgb(245,82,82)",   # Red (DREAM)
-  "rgb(20,175,166)",  # Pretrolium (MAKRO)
-  "rgb(255,155,75)",  # Orange (SMILE)
-  "rgb(92,210,114)",  # Green (Grøn REFORM)
-  "rgb(66,180,224)",  # Blue (REFORM)
-  "rgb(188,173,221)", # Plum
-  "rgb(0,95,151)",    # Dark blue
-  "rgb(137,48,112)",  # Maroon
-  "rgb(70,70,76)",    # Dark gray
-  "rgb(230,230,232)", # Light gray
-]
+dream_colors_rgb = {
+  "DREAM": "rgb(245,82,82)",
+  "MAKRO": "rgb(20,175,166)",
+  "SMILE": "rgb(255,155,75)",
+  "Grøn REFORM": "rgb(92,210,114)",
+  "REFORM": "rgb(66,180,224)",
+  "Plum": "rgb(188,173,221)",
+  "Dark blue": "rgb(0,95,151)",
+  "Maroon": "rgb(137,48,112)",
+  "Dark gray": "rgb(70,70,76)",
+  "Light gray": "rgb(230,230,232)",
+}
 
 dream_colors_hex = [
   "F55252",
@@ -26,52 +26,72 @@ dream_colors_hex = [
   "E6E6E8",
 ]
 
-dream = {
-  "layout": {
-    "colorway": dream_colors_rgb,
-    "legend": {
-      "yanchor": "bottom",
-      "xanchor": "center",
-      "orientation": "h",
-      "y": -0.5,
-      "x": 0.5,
-    },
-    "font": {"color": "rgb(0,0,0)", "family": "Hind", "size": 14},
+DPI = 96
+DPCM = DPI / 2.54
 
-    "xaxis": {
-      "ticks": "outside",
-      "ticklen": 10,
-      "showline": True,
-      "linecolor": "black",
-      "automargin": False,
-      "title_standoff": 0,
-      "title_font_size": 14,
-    },
+small_figure_layout = dict(
+  width = 7.6 * DPCM,
+  margin_l = 1.5 * DPCM,
+  margin_r = 0.5 * DPCM,
+  margin_t = 1 * DPCM,
+)
 
-    "yaxis": {
-      "ticks": "outside",
-      "ticklen": 10,
-      "showline": True,
-      "linecolor": "black",
-      # "tickangle": -90,
-      "automargin": False,
-      "tickmode": "auto",
-    },
+large_figure_layout = dict(
+  width = 15.5 * DPCM,
+  margin_l = 1.5 * DPCM,
+  margin_r = 0.5 * DPCM,
+  margin_t = 1 * DPCM,
+)
 
-    "plot_bgcolor": "rgb(230,230,232)",
-    "xaxis_gridcolor": "white",
-    "yaxis_gridcolor": "white",
+dream_layout = dict(
 
-    # "paper_bgcolor": "rgb(230,230,232)",
-  },
+  colorway = list(dream_colors_rgb.values()),
 
-  "data": {
-    "scatter": [{
-      "line": {"width": 4},
-    }],
-  }
-}
+  title_font_size = 14,
 
-dream["data"]["scattergl"] = dream["data"]["scatter"]
+  legend_orientation = "h",
+  legend_yanchor = "top",
+  legend_y = -0.3,
+  legend_xanchor = "center",
+  legend_x = 0.5,
 
-dream_template = go.layout.Template(**dream)
+  font_color = "black",
+  font_family = "Hind",
+  font_size = 14,
+
+  xaxis_ticks = "outside",
+  xaxis_ticklen = 10,
+  xaxis_showline = True,
+  xaxis_linecolor = "black",
+  xaxis_automargin = False,
+  xaxis_title_standoff = 0,
+  xaxis_title_font_size = 14,
+
+  yaxis_ticks = "outside",
+  yaxis_ticklen = 10,
+  yaxis_showline = True,
+  yaxis_linecolor = "black",
+  # yaxis_tickangle = -90,
+  yaxis_automargin = False,
+  yaxis_tickmode = "auto",
+  yaxis_title_font_size = 14,
+
+  plot_bgcolor = dream_colors_rgb["Light gray"],
+  xaxis_gridcolor = "white",
+  yaxis_gridcolor = "white",
+
+  # paper_bgcolor = dream_colors_rgb["Light gray"],
+
+  **large_figure_layout
+)
+
+dream_template_data = dict(
+  scatter = [
+    dict(
+      line = dict(width = 4,),
+    ),
+  ],
+)
+dream_template_data["scattergl"] = dream_template_data["scatter"]
+
+dream_template = go.layout.Template(layout=dream_layout, data=dream_template_data)
