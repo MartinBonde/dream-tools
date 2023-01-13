@@ -1,5 +1,6 @@
 from math import ceil
 from time import sleep
+import inspect
 
 from plotly import offline as pyo
 from plotly.subplots import make_subplots
@@ -8,20 +9,12 @@ import pandas as pd
 
 import dreamtools as dt
 
-def plot(
-  iter_series,
-  operator=None,
-  function=None,
-  names=None,
-  start_year=None,
-  end_year=None,
-  reference_database=None,
-  default_set_aggregations=None,
-  **kwargs
-):
+def plot(*args, **kwargs):
   """Shorthand for DataFrame(...).plot(...)"""
-  dataframe = dt.DataFrame(iter_series, operator, function, names, start_year, end_year, reference_database, default_set_aggregations)
-  return dataframe.plot(**kwargs)
+  dataframe_kwargs = {k: v for k, v in kwargs.items() if k in inspect.signature(dt.DataFrame).parameters}
+  plot_kwargs = {k: v for k, v in kwargs.items() if k not in dataframe_kwargs}
+  dataframe = dt.DataFrame(*args, **dataframe_kwargs)
+  return dataframe.plot(**plot_kwargs)
 
 def prt(
   iter_series,

@@ -65,21 +65,21 @@ class _DataFrame(pd.DataFrame):
 
     fig.update_layout(**self.layout)
 
-    if xline is not None:
-      fig = add_xline(fig, xline)
-
     if vertical_legend:
       fig = dt.vertical_legend(fig)
+
+    if xline is not None:
+      fig = add_xline(fig, xline)
 
     if small_figure:
       fig.update_layout(**dt.small_figure_layout)
     else:
       fig.update_layout(**dt.large_figure_layout)
 
+    fig.update_layout(**layout)
+
     if horizontal_yaxis_title:
       fig = dt.horizontal_yaxis_title(fig)
-
-    fig.update_layout(**layout)
 
     return fig
 
