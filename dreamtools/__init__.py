@@ -1,6 +1,6 @@
 from .gams_pandas import *
 
-__version__ = "0.7.0"
+__version__ = "1.0.0"
 
 # Global setting controlling the default position of the time index (-1 = last index is time)
 X_AXIS_INDEX = -1

@@ -2,14 +2,15 @@ import dreamtools as dt
 import numpy as np
 import pandas as pd
 from IPython.display import display
+from inspect import signature
 
 
 def get_reference_database(s=None):
   """Get baseline database associated with a GamsPandasDatabase. Defaults to dt.REFERENCE_DATABASE."""
-  try:
-      return s.reference_database
-  except AttributeError:
-      return dt.REFERENCE_DATABASE
+  if isinstance(s, dt.GamsPandasDatabase) and s.reference_database is not None:
+    return s.reference_database
+  else:
+    return dt.REFERENCE_DATABASE
 
 def time(start, end=None):
   """Set global time settings."""
@@ -22,47 +23,40 @@ def years():
   """Return list of years in current time settings."""
   return list(range(dt.START_YEAR, dt.END_YEAR+1))
 
-def aggregate_index(index, default_set_aggregations):
-  """Aggregate index levels according to default_set_aggregations."""
-  if index.nlevels > 1:
-    return tuple(default_set_aggregations.get(k, list(index.levels[i])) for i, k in enumerate(index.names))
-  else:
-    return default_set_aggregations.get(index.name, list(index))
+def foo(series):
+  """For each level in series, index by ["tot"] if it exists, otherwise index by first element."""
+  return series.loc[series.index.get_level_values(series.index.names[0]).isin(["tot"])]
 
-def aggregate_series(series, default_set_aggregations=None, reference_database=None):
-  """Aggregate series according to default_set_aggregations, using reference_database to check if indices have been specified."""
+def aggregate_series(series, default_set_aggregations=None):
+  """Aggregate series according to default_set_aggregations."""
   if default_set_aggregations is None:
     default_set_aggregations = dt.DEFAULT_SET_AGGREGATIONS
 
-  if reference_database is None:
-    reference_database = get_reference_database()
+  aggregated = series.copy()
+  levels = aggregated.index.levels if aggregated.index.nlevels > 1 else [aggregated.index]
+  for level in levels:
+    aggregated_level = default_set_aggregations.get(level.name, list(level))
+    mask = aggregated.index.get_level_values(level.name).isin(aggregated_level)
+    if len(aggregated[mask]) > 0:
+      aggregated = aggregated.loc[mask]
 
-  if series.name in reference_database:
-    if len(reference_database[series.name].index) == len(series.index):
-      return series.loc[aggregate_index(series.index, default_set_aggregations)]
-  elif series.index.name in reference_database:
-    if len(reference_database[series.index.name]) == len(series.index):
-      return series.loc[aggregate_index(series.index, default_set_aggregations)]
-
-  return series
+  return aggregated
 
 def prt(
   iter_series,
   operator=None,
+  function=None,
+  names=None,
   start_year=None,
   end_year=None,
   reference_database=None,
   default_set_aggregations=None,
-  function=None,
-  names=None,
   dec=6,
   max_rows=100,
   max_columns=20,
 ):
   """Print a table of a series or list of series."""
-  df = to_dataframe(iter_series, operator, start_year, end_year, reference_database, default_set_aggregations, function)
-  if names:
-    df.columns = names
+  df = to_dataframe(iter_series, operator, function, names, start_year, end_year, reference_database, default_set_aggregations)
   df.style.set_properties(**{"text-align": "right", "precision": dec})
   with pd.option_context('display.max_rows', max_rows, 'display.max_columns', max_columns):  # more options can be specified also
     display(df)
@@ -82,19 +76,17 @@ def add_xline(fig, x):
 def plot(
   iter_series,
   operator=None,
+  function=None,
+  names=None,
   start_year=None,
   end_year=None,
   reference_database=None,
   default_set_aggregations=None,
-  function=None,
-  names=None,
   xline=None,
   layout={},
   **kwargs
 ):
-  df = to_dataframe(iter_series, operator, start_year, end_year, reference_database, default_set_aggregations, function)
-  if names:
-    df.columns = names
+  df = to_dataframe(iter_series, operator, function, names, start_year, end_year, reference_database, default_set_aggregations)
   fig = df.plot(**kwargs)
   layout = {
     "yaxis_title_text": dt.YAXIS_TITLE_FROM_OPERATOR.get(operator, ""),
@@ -107,55 +99,79 @@ def plot(
     fig = add_xline(fig, xline)
   return fig
 
+def map_with_baseline(function, data, baselines):
+  """Map function to data, passing baselines if function takes two arguments."""
+  if len(signature(function).parameters) == 2:
+    return map(function, data, baselines)
+  else:
+    return map(function, data)
+
 def to_dataframe(
-  iter_series,
+  data,
   operator=None,
+  function=None,
+  names=None,
   start_year=None,
   end_year=None,
-  reference_database=None,
+  baselines=None,
   default_set_aggregations=None,
-  function=None
 ):
-  if isinstance(iter_series, pd.Series):
-    iter_series = [iter_series]
+  if isinstance(data, pd.Series) or isinstance(data, dt.GamsPandasDatabase):
+    data = [data]
+
+  if isinstance(data[0], dt.GamsPandasDatabase) and function is None:
+    raise ValueError("Must specify function when passing GamsPandasDatabase.")
 
   if function is None:
     function = lambda x: x
 
-  iter_series = [function(aggregate_series(s, default_set_aggregations, reference_database))
-                 for s in iter_series]
-  if operator:
-    if reference_database is None:
-      reference_database = get_reference_database()
-    refs = [function((s - s + reference_database[s.name])[s.index])
-            if not dimension_changed(s, reference_database)
-            else s * np.NaN
-            for i, s in enumerate(iter_series)]
-    iter_series = compare(iter_series, refs, operator)
+  if baselines is None:
+    baselines = [get_reference_database(s) for s in data]
+
+  results = map_with_baseline(function, data, baselines)
+
+  if operator is not None:
+    if None in baselines:
+      raise ValueError("Cannot compare with baseline if no reference database is set.")
+    if isinstance(data[0], pd.Series):
+      baseline_series = map(get_baseline_series, data, baselines)
+      baseline_results = map_with_baseline(function, baseline_series, baselines)
+    else:
+      baseline_results = map_with_baseline(function, baselines, baselines)
+    results = compare(results, baseline_results, operator)
+
+  aggregated = [aggregate_series(s, default_set_aggregations) for s in results]
 
   try:
-    keep_axis_index = iter_series[0].index.names.index("t")
+    keep_axis_index = aggregated[0].index.names.index("t")
   except ValueError:
     keep_axis_index = -1 # Default to last index level if no level named "t" is found
  
-  df = merge_multiseries(*iter_series, keep_axis_index=keep_axis_index)
+  df = merge_multiseries(*aggregated, keep_axis_index=keep_axis_index)
   if start_year is None:
     start_year = dt.START_YEAR
   if end_year is None:
     end_year = dt.END_YEAR
   df = df.loc[start_year:end_year]
+
+  if names:
+    df.columns = names
+
   return df
 
-def dimension_changed(series, reference_database):
-  if series.name in reference_database:
-    is_changed = reference_database[series.name].index.nlevels != series.index.nlevels
-    if is_changed:
-      KeyError(
-        f"The dimension of '{series.name}' is different in the reference database. If indexing a single element write [['element']] rather than ['element'] to prevent the series dimension being reduced.")
-    return is_changed
-  else:
-    KeyError(f"'{series.name}' was not found in the reference database.")
-    return True
+def get_baseline_series(x, b):
+  """Lookup the name of series x in the reference database b and return the series from b with the same index as x"""
+  if x.name not in b:
+    raise KeyError(f"'{x.name}' was not found in the reference database.")
+
+  y = b[x.name]
+  if (
+    y.index.nlevels != x.index.nlevels
+    or y.index.names != x.index.names
+  ):
+    raise KeyError(f"The dimension of '{x.name}' is different in the reference database. If indexing a single element write [['element']] rather than ['element'] to prevent the series dimension being reduced.")
+
+  return (x - x + y)[x.index] # Adding and subtracting x is a trick to keep the index
 
 def compare(iter_series, refs, operator):
   """

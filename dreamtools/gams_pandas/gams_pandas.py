@@ -22,7 +22,7 @@ class GamsPandasDatabase:
   Changes to retrieved series are written to the GAMS database on export.
   """
 
-  def __init__(self, database=None, workspace=None, auto_sort_index=True, sparse=True):
+  def __init__(self, database=None, workspace=None, auto_sort_index=True, sparse=True, reference_database=None):
     if database is None:
       if workspace is None:
         workspace = gams.GamsWorkspace()
@@ -31,6 +31,7 @@ class GamsPandasDatabase:
     self.gams2numpy = gams2numpy.Gams2Numpy(database.workspace.system_directory)
     self.auto_sort_index = auto_sort_index
     self.sparse = sparse
+    self.reference_database = reference_database
     self.series = {}
 
   def __getattr__(self, item):

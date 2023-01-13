@@ -2,22 +2,24 @@ import os
 import sys
 sys.path.insert(0, os.getcwd())
 
+import pytest
 import numpy as np
 import pandas as pd
 import dreamtools as dt
 
 
 @np.vectorize
-def approximately_equal(x, y, ndigits=0):
+def approximately_equal(x, y, ndigits=6):
   return round(x, ndigits) == round(y, ndigits)
 
 def test_gdx_read():
   db = dt.Gdx("test.gdx")
-  assert approximately_equal(db["qY"]["byg", 2025], 257.55)
-  assert approximately_equal(db["qI_s"]["IB", "fre", 2025], 7.41)
+  assert approximately_equal(db["qY"]["byg", 2025], 257.55, ndigits=2)
+  assert approximately_equal(db["qI_s"]["IB", "fre", 2025], 7.41, ndigits=2)
   assert approximately_equal(db["eHh"], 1.25)
   assert db["fp"] == 1.0178
-  assert all(approximately_equal(db["inf_factor"], db["fp"]**(2010 - db["inf_factor"].index)))
+  db.create_parameter("inf_factor_test", db["t"], data=db["fp"]**(2010 - db["t"]))
+  assert all(approximately_equal(db["inf_factor"], db["inf_factor_test"]))
   assert db["s"].name == "s_"
   assert db.vHh.loc["NetFin","tot",1970] == 0
   assert set(db["vHh"].index.get_level_values("a_")).issubset(set(db["a_"]))
@@ -164,7 +166,7 @@ def test_multiply_with_different_sets():
   db = dt.Gdx("test.gdx")
   i, s = db["i"], db["s"]
   result = (db["pI"] * db["qI_s"].loc[i, s]).groupby("t").sum() / db["vI"]["iTot"] # Using pI_s would give exact 1
-  assert all(approximately_equal(result.loc[2030:], 1))
+  assert all(approximately_equal(result.loc[2030:], 1, ndigits=1))
 
 def test_export_with_no_changes():
   dt.Gdx("test.gdx").export("test_export.gdx", relative_path=True)
@@ -301,3 +303,19 @@ def test_time_index_pos():
   p = db.create_parameter("p", [db.s_, db.s, db.t], data=0)
   p_inv_sets = db.create_parameter("p_inv_sets", [db.t, db.s, db.s_], data=0)
   assert dt.to_dataframe(p[:,'tje',:]).size == dt.to_dataframe(p_inv_sets[:,'tje',:]).size
+
+def test_aggregation_with_2_sets():
+  db = dt.Gdx("test.gdx")
+  p = db.create_parameter("p", [db.a_, db.portf_, db.t], data=0)
+  assert dt.to_dataframe(p).columns[0] == "p[tot,NetFin]"
+
+def test_compare():
+  db = dt.Gdx("test.gdx")
+  with pytest.raises(ValueError):
+    dt.to_dataframe(db.qBNP, "q")
+  baseline = dt.REFERENCE_DATABASE = dt.Gdx("test.gdx")
+  db.qBNP *= 1.01
+  q = dt.to_dataframe(db.qBNP, "q", start_year=2025)
+  m = dt.to_dataframe(db.qBNP, "m", start_year=2025)
+  assert approximately_equal(q, 0.01).all().all()
+  assert ((15 < m) & (m < 25)).all().all()
