@@ -158,12 +158,7 @@ def DataFrame(
 
   aggregated = [aggregate_series(s, default_set_aggregations) for s in results]
 
-  try:
-    keep_axis_index = aggregated[0].index.names.index(dt.X_AXIS_NAME)
-  except ValueError:
-    keep_axis_index = dt.X_AXIS_INDEX # Default if no level named dt.X_AXIS_NAME is found
- 
-  df = merge_multiseries(*aggregated, keep_axis_index=keep_axis_index)
+  df = merge_multiseries(aggregated)
   if start_year is None:
     start_year = dt.START_YEAR
   if end_year is None:
@@ -264,12 +259,14 @@ def flatten_keys(name, keys, keep_axis_index):
   flat_name = f"{name}[{keys_str}]"
   return flat_name, keys[keep_axis_index]
 
-def merge_multiseries(*series, keep_axis_index=-1):
+def merge_multiseries(series, keep_axis_indices=None):
   """
   Return a DataFrame from any number of Series, with all levels except <keep_axis_index> concatenated as column names.
   """
   output = pd.DataFrame()
-  for s in series:
+  if keep_axis_indices is None:
+    keep_axis_indices = [get_keep_axis_index(s) for s in series]
+  for s, keep_axis_index in zip(series, keep_axis_indices):
     df = unstack_multiseries(s, keep_axis_index)
     for c in df.columns:
       new_name = c if (c != "0") else ""
@@ -277,5 +274,16 @@ def merge_multiseries(*series, keep_axis_index=-1):
       while new_name in output:
         iter += 1
         new_name = f"{c}{iter}"
-      output[new_name] = df[c]
+      output[new_name] = df[c] 
+
   return output
+
+
+def get_keep_axis_index(series):
+  """
+  Return the index of the axis to keep when unstacking a multi-indexed series.
+  """
+  try:
+    return series.index.names.index(dt.X_AXIS_NAME)
+  except ValueError:
+    return dt.X_AXIS_INDEX # Default if no level named dt.X_AXIS_NAME is found

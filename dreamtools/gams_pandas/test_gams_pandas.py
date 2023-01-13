@@ -1,5 +1,6 @@
 import os
 import sys
+# os.chdir("../..")
 sys.path.insert(0, os.getcwd())
 
 import pytest
@@ -323,3 +324,13 @@ def test_compare():
   m = dt.DataFrame(db.qBNP, "m", start_year=2025)
   assert approximately_equal(q, 0.01).all().all()
   assert ((15 < m) & (m < 25)).all().all()
+
+def test_aggregation():
+  db = dt.Gdx("test.gdx")
+  default_set_aggregations={"s_": ["tje"]}
+  y = dt.DataFrame(db.qY, default_set_aggregations=default_set_aggregations)
+  k = dt.DataFrame(db.qK, default_set_aggregations=default_set_aggregations)
+  yk = dt.DataFrame([db.qY, db.qK], default_set_aggregations=default_set_aggregations)
+  ky = dt.DataFrame([db.qK, db.qY], default_set_aggregations=default_set_aggregations)
+  
+  assert y.size + k.size == yk.size == ky.size
