@@ -4,7 +4,6 @@ import pandas as pd
 from IPython.display import display
 from inspect import signature
 
-
 def get_reference_database(s=None):
   """Get baseline database associated with a GamsPandasDatabase. Defaults to dt.REFERENCE_DATABASE."""
   if isinstance(s, dt.GamsPandasDatabase) and s.reference_database is not None:
@@ -42,24 +41,74 @@ def aggregate_series(series, default_set_aggregations=None):
 
   return aggregated
 
-def prt(
-  iter_series,
-  operator=None,
-  function=None,
-  names=None,
-  start_year=None,
-  end_year=None,
-  reference_database=None,
-  default_set_aggregations=None,
-  dec=6,
-  max_rows=100,
-  max_columns=20,
-):
-  """Print a table of a series or list of series."""
-  df = to_dataframe(iter_series, operator, function, names, start_year, end_year, reference_database, default_set_aggregations)
-  df.style.set_properties(**{"text-align": "right", "precision": dec})
-  with pd.option_context('display.max_rows', max_rows, 'display.max_columns', max_columns):  # more options can be specified also
-    display(df)
+def map_with_baseline(function, data, baselines):
+  """Map function to data, passing baselines if function takes two arguments."""
+  if len(signature(function).parameters) == 2:
+    return list(map(function, data, baselines))
+  else:
+    return list(map(function, data))
+
+@pd.api.extensions.register_dataframe_accessor("dt")
+class _DataFrame(pd.DataFrame):
+  """Pandas DataFrame with additional attributes for plotly layout."""
+
+  _internal_names = pd.DataFrame._internal_names + ["layout"]
+  _internal_names_set = set(_internal_names)
+
+  @property
+  def _constructor(self):
+      return _DataFrame
+
+  def plot(self, layout={}, xline=None, vertical_legend=True, horizontal_yaxis_title=True, small_figure=False, **kwargs):
+    """Plot DataFrame using plotly."""
+    fig = pd.DataFrame.plot(self, **kwargs)()
+
+    fig.update_layout(**self.layout)
+
+    if vertical_legend:
+      fig = dt.vertical_legend(fig)
+
+    if xline is not None:
+      fig = add_xline(fig, xline)
+
+    if small_figure:
+      fig.update_layout(**dt.small_figure_layout)
+    else:
+      fig.update_layout(**dt.large_figure_layout)
+
+    fig.update_layout(**layout)
+
+    if horizontal_yaxis_title:
+      fig = dt.horizontal_yaxis_title(fig)
+
+    return fig
+
+def horizontal_yaxis_title(fig, text=None):
+  """
+  Update plotly figure to make the y-axis horizontal using annotations
+  """
+  if text is None:
+    text = fig.layout.yaxis.title.text
+  return fig.update_layout(
+    yaxis_title_text = "",
+    annotations = [
+      dict(
+        x = 0, xshift = - 0.8 * fig.layout.margin.l, xref = "paper",
+        y = 1, yshift = 0.8 * fig.layout.margin.t, yref = "paper",     
+        text = text,
+        showarrow = False,
+      )
+    ]
+  )
+
+def vertical_legend(fig, col_count=2):
+  """
+  Update plotly figure by splitting legend into <col_count> columns.
+  """
+  trace_count = len(fig.data)
+  for i, trace in enumerate(fig.data):
+    trace.legendgroup = i // (trace_count / col_count)
+  return fig
 
 def add_xline(fig, x):
   "Add a vertical line to a plotly figure at x"
@@ -73,40 +122,7 @@ def add_xline(fig, x):
     opacity=0.3,
   )])
 
-def plot(
-  iter_series,
-  operator=None,
-  function=None,
-  names=None,
-  start_year=None,
-  end_year=None,
-  reference_database=None,
-  default_set_aggregations=None,
-  xline=None,
-  layout={},
-  **kwargs
-):
-  df = to_dataframe(iter_series, operator, function, names, start_year, end_year, reference_database, default_set_aggregations)
-  fig = df.plot(**kwargs)
-  layout = {
-    "yaxis_title_text": dt.YAXIS_TITLE_FROM_OPERATOR.get(operator, ""),
-    "xaxis_title_text": dt.TIME_AXIS_TITLE,
-    "legend_title_text": "",
-    **layout
-  }
-  fig.update_layout(layout)
-  if xline is not None:
-    fig = add_xline(fig, xline)
-  return fig
-
-def map_with_baseline(function, data, baselines):
-  """Map function to data, passing baselines if function takes two arguments."""
-  if len(signature(function).parameters) == 2:
-    return map(function, data, baselines)
-  else:
-    return map(function, data)
-
-def to_dataframe(
+def DataFrame(
   data,
   operator=None,
   function=None,
@@ -130,7 +146,7 @@ def to_dataframe(
 
   results = map_with_baseline(function, data, baselines)
 
-  if operator is not None:
+  if operator:
     if None in baselines:
       raise ValueError("Cannot compare with baseline if no reference database is set.")
     if isinstance(data[0], pd.Series):
@@ -142,12 +158,7 @@ def to_dataframe(
 
   aggregated = [aggregate_series(s, default_set_aggregations) for s in results]
 
-  try:
-    keep_axis_index = aggregated[0].index.names.index("t")
-  except ValueError:
-    keep_axis_index = -1 # Default to last index level if no level named "t" is found
- 
-  df = merge_multiseries(*aggregated, keep_axis_index=keep_axis_index)
+  df = merge_multiseries(aggregated)
   if start_year is None:
     start_year = dt.START_YEAR
   if end_year is None:
@@ -156,6 +167,15 @@ def to_dataframe(
 
   if names:
     df.columns = names
+
+  df = _DataFrame(df)
+
+  # Set default layout for plotly which depends on the operator
+  df.layout = {
+    "yaxis_title_text": dt.YAXIS_TITLE_FROM_OPERATOR.get(operator, ""),
+    "xaxis_title_text": dt.TIME_AXIS_TITLE,
+    "legend_title_text": "",
+  }
 
   return df
 
@@ -239,12 +259,14 @@ def flatten_keys(name, keys, keep_axis_index):
   flat_name = f"{name}[{keys_str}]"
   return flat_name, keys[keep_axis_index]
 
-def merge_multiseries(*series, keep_axis_index=-1):
+def merge_multiseries(series, keep_axis_indices=None):
   """
   Return a DataFrame from any number of Series, with all levels except <keep_axis_index> concatenated as column names.
   """
   output = pd.DataFrame()
-  for s in series:
+  if keep_axis_indices is None:
+    keep_axis_indices = [get_keep_axis_index(s) for s in series]
+  for s, keep_axis_index in zip(series, keep_axis_indices):
     df = unstack_multiseries(s, keep_axis_index)
     for c in df.columns:
       new_name = c if (c != "0") else ""
@@ -252,5 +274,16 @@ def merge_multiseries(*series, keep_axis_index=-1):
       while new_name in output:
         iter += 1
         new_name = f"{c}{iter}"
-      output[new_name] = df[c]
+      output[new_name] = df[c] 
+
   return output
+
+
+def get_keep_axis_index(series):
+  """
+  Return the index of the axis to keep when unstacking a multi-indexed series.
+  """
+  try:
+    return series.index.names.index(dt.X_AXIS_NAME)
+  except ValueError:
+    return dt.X_AXIS_INDEX # Default if no level named dt.X_AXIS_NAME is found
