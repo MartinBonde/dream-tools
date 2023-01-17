@@ -47,34 +47,33 @@ dream_layout = dict(
 
   colorway = list(dream_colors_rgb.values()),
 
-  title_font_size = 14,
+  title_font_size = 10,
 
   legend_orientation = "h",
   legend_yanchor = "top",
-  legend_y = -0.3,
+  legend_y = -0.15,
   legend_xanchor = "center",
   legend_x = 0.5,
 
   font_color = "black",
   font_family = "Hind",
-  font_size = 14,
+  font_size = 10,
 
   xaxis_ticks = "outside",
   xaxis_ticklen = 10,
   xaxis_showline = True,
   xaxis_linecolor = "black",
   xaxis_automargin = False,
-  xaxis_title_standoff = 0,
-  xaxis_title_font_size = 14,
+  xaxis_title_standoff = 5,
+  xaxis_title_font_size = 10,
 
   yaxis_ticks = "outside",
   yaxis_ticklen = 10,
   yaxis_showline = True,
   yaxis_linecolor = "black",
-  # yaxis_tickangle = -90,
   yaxis_automargin = False,
   yaxis_tickmode = "auto",
-  yaxis_title_font_size = 14,
+  yaxis_title_font_size = 10,
 
   plot_bgcolor = dream_colors_rgb["Light gray"],
   xaxis_gridcolor = "white",
