@@ -56,18 +56,22 @@ def figures_to_html(figs, filename="figures.html"):
 
   file.write("</body></html>" + "\n")
 
-def subplot(figures, cols=2, **kwargs):
+def subplot(figures, n_columns=2, n_legend_columns=2, **kwargs):
   """Create subplot from iter of figures."""
-  rows = ceil(len(figures) / cols)
+  rows = ceil(len(figures) / n_columns)
   fig = make_subplots(
     rows=rows,
-    cols=cols,
+    cols=n_columns,
     subplot_titles=[f["layout"]["title"]["text"] for f in figures],
     **kwargs
   )
   for i, f in enumerate(figures):
     for trace in f["data"]:
-      fig.add_trace(trace, row=ceil((i+1)/cols), col=1 + i % cols)
+      trace.showlegend = i==1
+      fig.add_trace(trace, row=ceil((i+1)/n_columns), col=1 + i % n_columns)
+  trace_count = len(figures[0].data)
+  for i, trace in enumerate(fig.data):
+    trace.legendgroup = i // (trace_count / n_legend_columns)
   return fig
 
 def html_table(df, precision=2, header=True, header_background_color="#14AFA6", head_text_color="#ffffff"):
