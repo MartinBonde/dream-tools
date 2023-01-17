@@ -203,6 +203,8 @@ def compare(iter_series, refs, operator):
     return [(s / b - 1)*100 for s, b in zip(iter_series, refs)]
   elif operator in ["m"]:
     return [s - b for s, b in zip(iter_series, refs)]
+  elif operator in ["pm"]:
+    return [(s - b)*100 for s, b in zip(iter_series, refs)]
   elif operator in ["s"]:
     for b in refs:
       b.name = "baseline." + b.name
