@@ -1,7 +1,6 @@
 import dreamtools as dt
 import numpy as np
 import pandas as pd
-from IPython.display import display
 from inspect import signature
 
 def get_reference_database(s=None):
@@ -131,32 +130,35 @@ def DataFrame(
   end_year=None,
   baselines=None,
   default_set_aggregations=None,
+  functions=None,
 ):
   if isinstance(data, pd.Series) or isinstance(data, dt.GamsPandasDatabase):
     data = [data]
 
-  if isinstance(data[0], dt.GamsPandasDatabase) and function is None:
-    raise ValueError("Must specify function when passing GamsPandasDatabase.")
+  if function is not None:
+    functions = [function]
 
-  if function is None:
-    function = lambda x: x
+  if functions is None:
+    if isinstance(data[0], dt.GamsPandasDatabase):
+      raise ValueError("Must specify function when passing GamsPandasDatabase.")
+    functions = [lambda x: x]
 
   if baselines is None:
     baselines = [get_reference_database(s) for s in data]
 
-  results = map_with_baseline(function, data, baselines)
+  results = [map_with_baseline(function, data, baselines) for function in functions]
 
   if operator:
     if None in baselines:
-      raise ValueError("Cannot compare with baseline if no reference database is set.")
+      raise ValueError("Cannot compare with baseline as no baseline has been specified and no global reference database has been set.")
     if isinstance(data[0], pd.Series):
       baseline_series = map(get_baseline_series, data, baselines)
-      baseline_results = map_with_baseline(function, baseline_series, baselines)
+      baseline_results = [map_with_baseline(function, baseline_series, baselines) for function in functions]
     else:
-      baseline_results = map_with_baseline(function, baselines, baselines)
-    results = compare(results, baseline_results, operator)
+      baseline_results = [map_with_baseline(function, baselines, baselines) for function in functions]
+    results = [compare(a, b, operator) for a, b in zip(results, baseline_results)]
 
-  aggregated = [aggregate_series(s, default_set_aggregations) for s in results]
+  aggregated = [aggregate_series(s, default_set_aggregations) for f in results for s in f]
 
   df = merge_multiseries(aggregated)
   if start_year is None:

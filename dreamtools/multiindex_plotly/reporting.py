@@ -45,16 +45,16 @@ def write_image(fig, file_name, scale=3):
 
 def figures_to_html(figs, filename="figures.html"):
   """Write an iter of plotly figures to an html file."""
-  file = open(filename, 'w')
-  file.write("<html><head></head><body>" + "\n")
+  with open(filename, 'w') as file:
+    file.write("<html><head></head><body>" + "\n")
 
-  for i, fig in enumerate(figs):
-    inner_html = pyo.plot(
-      fig, include_plotlyjs=(i==0), output_type='div'
-    )
-    file.write(inner_html)
+    for i, fig in enumerate(figs):
+      inner_html = pyo.plot(
+        fig, include_plotlyjs=(i==0), output_type='div'
+      )
+      file.write(inner_html)
 
-  file.write("</body></html>" + "\n")
+    file.write("</body></html>" + "\n")
 
 def subplot(figures, n_columns=2, n_legend_columns=2, **kwargs):
   """Create subplot from iter of figures."""
