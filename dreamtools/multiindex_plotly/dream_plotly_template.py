@@ -2,10 +2,10 @@ import plotly.graph_objects as go
 
 dream_colors_rgb = {
   "DREAM": "rgb(245,82,82)",
-  "MAKRO": "rgb(20,175,166)",
-  "SMILE": "rgb(255,155,75)",
-  "Grøn REFORM": "rgb(92,210,114)",
   "REFORM": "rgb(66,180,224)",
+  "Grøn REFORM": "rgb(92,210,114)",
+  "SMILE": "rgb(255,155,75)",
+  "MAKRO": "rgb(20,175,166)",
   "Plum": "rgb(188,173,221)",
   "Dark blue": "rgb(0,95,151)",
   "Maroon": "rgb(137,48,112)",
@@ -75,11 +75,8 @@ dream_layout = dict(
   yaxis_tickmode = "auto",
   yaxis_title_font_size = 10,
 
-  plot_bgcolor = dream_colors_rgb["Light gray"],
-  xaxis_gridcolor = "white",
-  yaxis_gridcolor = "white",
-
-  # paper_bgcolor = dream_colors_rgb["Light gray"],
+  xaxis_gridcolor = dream_colors_rgb["Light gray"],
+  yaxis_gridcolor = dream_colors_rgb["Light gray"],
 
   **large_figure_layout
 )
