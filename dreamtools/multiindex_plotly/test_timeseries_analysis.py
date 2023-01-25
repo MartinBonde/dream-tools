@@ -1,7 +1,7 @@
 import os
 import sys
-sys.path.insert(0, os.getcwd())
 # os.chdir("../..")
+sys.path.insert(0, os.getcwd())
 
 import pytest
 import numpy as np
@@ -53,3 +53,14 @@ def test_DataFrame_with_multiple_baselines():
   q = dt.DataFrame([s1, s2], "q", lambda s: s.pY['tje'] * s.qY['tje'], ["s1", "s2"], baselines=[b1, b2])
   assert all(q["s1"] == -0.5)
   assert all(q["s2"] == 1)
+
+def test_functions():
+  dt.REFERENCE_DATABASE = dt.Gdx("test.gdx")
+  db = dt.Gdx("test.gdx")
+  df1 = dt.DataFrame(db, functions=[lambda s: s.qBNP, lambda s: s.pBNP])
+  df2 = dt.DataFrame([db.qBNP, db.pBNP])
+  assert df1.equals(df2)
+
+  df1 = dt.DataFrame(db, "pq", functions=[lambda s: s.qBNP, lambda s: s.pBNP])
+  df2 = dt.DataFrame([db.qBNP, db.pBNP], "pq")
+  assert df1.equals(df2)
