@@ -43,9 +43,9 @@ def write_image(fig, file_name, scale=3):
       sleep(0.01)
       img.save(file_name, dpi=(96 * scale, 96 * scale))
 
-def figures_to_html(figs, filename="figures.html"):
+def figures_to_html(figs, filename="figures.html", encoding="utf-8"):
   """Write an iter of plotly figures to an html file."""
-  with open(filename, 'w') as file:
+  with open(filename, 'w', encoding=encoding) as file:
     file.write("<html><head></head><body>" + "\n")
 
     for i, fig in enumerate(figs):
