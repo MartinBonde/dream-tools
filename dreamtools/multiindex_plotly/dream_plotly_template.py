@@ -29,18 +29,24 @@ dream_colors_hex = [
 DPI = 96
 DPCM = DPI / 2.54
 
+plot_height = 3.8
+
 small_figure_layout = dict(
   width = 7.6 * DPCM,
+  height = (plot_height + 5) * DPCM,
   margin_l = 1.5 * DPCM,
   margin_r = 0.5 * DPCM,
   margin_t = 1 * DPCM,
+  margin_b = 5 * DPCM,
 )
 
 large_figure_layout = dict(
   width = 15.5 * DPCM,
+  height = (plot_height + 3.8) * DPCM,
   margin_l = 1.5 * DPCM,
   margin_r = 0.5 * DPCM,
   margin_t = 1 * DPCM,
+  margin_b = 3.8 * DPCM,
 )
 
 dream_layout = dict(
@@ -51,7 +57,7 @@ dream_layout = dict(
 
   legend_orientation = "h",
   legend_yanchor = "top",
-  legend_y = -0.15,
+  legend_y = -0.4,
   legend_xanchor = "center",
   legend_x = 0.5,
 
