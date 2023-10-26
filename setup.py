@@ -22,5 +22,5 @@ setuptools.setup(
     "License :: OSI Approved :: MIT License",
   ],
   python_requires='>=3.6',
-  install_requires=["pandas", "easygui"],
+  install_requires=["pandas", "numpy", "plotly"],
 )

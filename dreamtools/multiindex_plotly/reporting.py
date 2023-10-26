@@ -9,12 +9,17 @@ import pandas as pd
 
 import dreamtools as dt
 
-def plot(*args, **kwargs):
+def plot(
+    data,
+    operator=None,
+    *args,
+    **kwargs
+  ):
   """Shorthand for DataFrame(...).plot(...)"""
   dataframe_kwargs = {k: v for k, v in kwargs.items() if k in inspect.signature(dt.DataFrame).parameters}
   plot_kwargs = {k: v for k, v in kwargs.items() if k not in dataframe_kwargs}
-  dataframe = dt.DataFrame(*args, **dataframe_kwargs)
-  return dataframe.plot(**plot_kwargs)
+  dataframe = dt.DataFrame(data, operator, *args, **dataframe_kwargs)
+  return dataframe.plot(operator, **plot_kwargs)
 
 def prt(
   iter_series,

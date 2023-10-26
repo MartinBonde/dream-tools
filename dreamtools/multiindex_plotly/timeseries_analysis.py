@@ -58,7 +58,17 @@ class _DataFrame(pd.DataFrame):
   def _constructor(self):
       return _DataFrame
 
-  def plot(self, layout={}, xline=None, vertical_legend=True, horizontal_yaxis_title=True, small_figure=False, **kwargs):
+  def plot(
+    self,
+    operator=None,
+    layout={},
+    xline=None,
+    vertical_legend=True,
+    horizontal_yaxis_title=True,
+    small_figure=False,
+    alternating_dash=None,
+    **kwargs
+  ):
     """Plot DataFrame using plotly."""
     fig = pd.DataFrame.plot(self, **kwargs)()
 
@@ -80,7 +90,26 @@ class _DataFrame(pd.DataFrame):
     if horizontal_yaxis_title:
       fig = dt.horizontal_yaxis_title(fig)
 
+    if operator == "s" and alternating_dash is None:
+      alternating_dash = "dot"
+
+    if alternating_dash is not None:
+      fig = dt.alternating_dash(fig, dash=alternating_dash, line_width=3)
+
     return fig
+
+def alternating_dash(fig, dash="dot", line_width=None):
+  """
+  Update traces in plotly figure to have alternating dash styles and reusing colors.
+  """
+  line_colors = [trace.line.color for trace in fig.data]
+  for i, trace in enumerate(fig.data):
+    trace.update(
+      line_dash = "solid" if i % 2 == 0 else dash,
+      line_color = line_colors[i//2],
+      line_width = line_width,
+    )
+  return fig
 
 def horizontal_yaxis_title(fig, text=None):
   """
