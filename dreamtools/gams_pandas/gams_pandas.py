@@ -377,10 +377,15 @@ class GamsPandasDatabase:
     if all_na(value): pass
     elif symbol_is_scalar(symbol):
       symbol.add_record().value = value
+    elif list(value.keys()) == [0]:  # If singleton series
+      symbol.add_record().value = value[0]
     else:
-      df = value.reset_index()
-      df[value.index.names] = df[value.index.names].astype(str)
-      self.gams2numpy.gmdFillSymbolStr(self.database, symbol, df.to_numpy())
+      for k, v in value.items():
+        symbol.add_record(map_lowest_level(str, k)).value = v
+    # else:
+    #   df = value.reset_index()
+    #   df[value.index.names] = df[value.index.names].astype(str)
+    #   self.gams2numpy.gmdFillSymbolStr(self.database, symbol, df.to_numpy())
 
   @staticmethod
   def set_variable_records(symbol, value):
