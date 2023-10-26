@@ -134,14 +134,13 @@ gamY - Documentation
 \begin_layout Author
 
 \lang danish
-Martin K.
- Bonde
+Martin Kirk Bonde
 \end_layout
 
 \begin_layout Date
 
 \lang danish
-October 2019
+January 2022
 \end_layout
 
 \begin_layout Standard
@@ -206,90 +205,14 @@ Installation
 \end_layout
 
 \begin_layout Standard
-A Python installation is needed to use gamY, but luckily GAMS already comes
- with such an installation.
- The executable is located in the GAMS directory, for example 
-\emph on
-C:
-\backslash
-GAMS
-\backslash
-win64
-\backslash
-28.2
-\backslash
-GMSPython
-\backslash
-python.exe
+gamY requires an installation of GAMS to be useful.
 \end_layout
 
 \begin_layout Standard
-Before using gamY for the first time, a few additional Python packages must
- be installed.
- This can be done by running the 'install_python_modules.cmd' file found
- in the gamY directory after adjusting the path in the first line.
-\end_layout
-
-\begin_layout Subsubsection
-install_python_modules.cmd
-\end_layout
-
-\begin_layout Standard
-\begin_inset Box Boxed
-position "t"
-hor_pos "c"
-has_inner_box 1
-inner_pos "t"
-use_parbox 0
-use_makebox 0
-width "100col%"
-special "none"
-height "1in"
-height_special "totalheight"
-thickness "0.4pt"
-separation "3pt"
-shadowsize "4pt"
-framecolor "black"
-backgroundcolor "none"
-status open
-
-\begin_layout LyX-Code
-cd 
-\color red
-"C:
-\backslash
-GAMS
-\backslash
-win64
-\backslash
-28.2
-\backslash
-GMSPython"
-\end_layout
-
-\begin_layout LyX-Code
-python -m pip install --upgrade pip
-\end_layout
-
-\begin_layout LyX-Code
-cd "Scripts"
-\end_layout
-
-\begin_layout LyX-Code
-pip install numpy
-\end_layout
-
-\begin_layout LyX-Code
-pip install pandas
-\end_layout
-
-\begin_layout LyX-Code
-pip install xlwings
-\end_layout
-
-\end_inset
-
-
+gamY comes with an executable, gamY.exe, which does not require any further
+ installation.
+ It can also be run as a python script which simply requires a python installati
+on.
 \end_layout
 
 \begin_layout Section
@@ -308,7 +231,7 @@ When run as a script, gamY does 2 things:
 
 \begin_layout Enumerate
 gamY processes the input file, expanding all gamY commands, and outputs
- a file with regular GAMS code.
+ a file with plain GAMS code.
  To distinguish the input file and the expanded output file we use the extension
  .gmy for the expanded file and put it in a sub-directory called 
 \emph on
@@ -355,51 +278,13 @@ backgroundcolor "none"
 status open
 
 \begin_layout LyX-Code
-:: Adapt the path below to your local environment
-\end_layout
-
-\begin_layout LyX-Code
-set GAMSDIR=
-\color red
-C:
-\backslash
-GAMS
-\backslash
-win64
-\backslash
-28.2
-\end_layout
-
-\begin_layout LyX-Code
-
-\end_layout
-
-\begin_layout LyX-Code
-:: These paths are set automatically based on the above
-\end_layout
-
-\begin_layout LyX-Code
-set gams=%GAMSDIR%
-\backslash
-gams.exe
-\end_layout
-
-\begin_layout LyX-Code
-set python=%GAMSDIR%
-\backslash
-GMSPython
-\backslash
-python.exe
-\end_layout
-
-\begin_layout LyX-Code
-set gamY=%python% 
+set gamY=
 \color red
 Q:
 \backslash
 gamY
 \backslash
-gamY.py
+gamY.exe
 \end_layout
 
 \begin_layout LyX-Code
@@ -443,9 +328,9 @@ gamY.py
 \end_layout
 
 \begin_layout Standard
-To work offline, copy the gamY directory 
+To work offline, copy the gamY 
 \emph on
-
+executable 
 \begin_inset Quotes xld
 \end_inset
 
@@ -454,6 +339,8 @@ Q:
 gamY
 \emph default
 
+\backslash
+gamY.exe
 \begin_inset Quotes xrd
 \end_inset
 
@@ -470,7 +357,7 @@ Q:
 \backslash
 gamY
 \backslash
-gamY.py
+gamY.exe
 \begin_inset Quotes xrd
 \end_inset
 
@@ -482,9 +369,7 @@ ith
 \begin_inset Quotes xld
 \end_inset
 
-gamY
-\backslash
-gamY.py
+gamY.exe
 \begin_inset Quotes xrd
 \end_inset
 
@@ -3962,7 +3847,7 @@ status open
 \series bold
 $BLOCK
 \series default
- mSector_Model
+ mSector_model
 \end_layout
 
 \begin_deeper
@@ -4153,7 +4038,7 @@ $GROUP
 
 \begin_deeper
 \begin_layout LyX-Code
-group_calib_endo
+group_endo
 \end_layout
 
 \begin_layout LyX-Code
@@ -4179,7 +4064,8 @@ gamma[j]
 \begin_inset Newline newline
 \end_inset
 
-This procedure takes the existing endogenous variables, subtracts 
+This procedure takes the existing group of endogenous variables, subtracts
+ 
 \begin_inset Formula $C_{j}$
 \end_inset
 
@@ -4187,7 +4073,7 @@ This procedure takes the existing endogenous variables, subtracts
 \begin_inset Formula $\gamma_{j}$
 \end_inset
 
- (making it endogenous when solving).C
+ (making it endogenous when solving).
 \begin_inset Foot
 status collapsed
 
@@ -4280,12 +4166,12 @@ status open
 \series bold
 $BLOCK
 \series default
- Calib_eq
+ calibration_block
 \end_layout
 
 \begin_deeper
 \begin_layout LyX-Code
-eq1_calib[j]..
+eq1_calibration[j]..
  sum(j,gamma[j]) =E= 1 ;
 \end_layout
 
@@ -4306,8 +4192,8 @@ $ENDBLOCK
 \begin_inset Newline newline
 \end_inset
 
-This new calibration-block is then added to the existing equations of the
- model by using the $MODEL command:
+This new calibration-block is then combined with the existing block of equations
+ by using the $MODEL command:
 \begin_inset Newline newline
 \end_inset
 
@@ -4335,16 +4221,16 @@ status open
 \series bold
 $MODEL
 \series default
- Calib_model
+ calibration_model
 \end_layout
 
 \begin_deeper
 \begin_layout LyX-Code
-mSector_Model
+mSector_model
 \end_layout
 
 \begin_layout LyX-Code
-Calib_eq
+calibration_block
 \end_layout
 
 \end_deeper
@@ -4357,7 +4243,7 @@ Calib_eq
 \end_layout
 
 \begin_layout LyX-Code
-$FIX All; $UNFIX G_Kalib; 
+$FIX All; $UNFIX group_calib_endo; 
 \end_layout
 
 \begin_layout LyX-Code
@@ -4371,7 +4257,7 @@ solve Calib_model using CNS;
 \end_inset
 
 The last two lines first fixes all variables, endogenizes the variables
- of the calibration model, and solve the calibration model.
+ of the calibration model, and solves the calibration model.
  
 \end_layout
 
@@ -4392,13 +4278,13 @@ Solving.
 
 \series default
  If the calibration was solved successfully, proceed and solve the actual
- model, composed of equations 
+ model, composed of block of equations 
 \series bold
-mSector_Model
+mSector_model
 \series default
  and endogenous variables 
 \series bold
-group_calib_endo
+group_endo
 \series default
 .
  Check that the results of solving the calibration model and the actual
