@@ -11,7 +11,7 @@ import time
 from copy import deepcopy
 from .utility import index_from_symbol, symbol_is_scalar, is_iterable, map_lowest_level, index_names_from_symbol, \
   all_na, map_to_int_where_possible
-import gams.transfer.numpy
+import gams.core.numpy
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class GamsPandasDatabase:
         workspace = gams.GamsWorkspace()
       database = workspace.add_database()
     self.database = database
-    self.gams2numpy = gams.transfer.numpy.Gams2Numpy(database.workspace.system_directory)
+    self.gams2numpy = gams.core.numpy.Gams2Numpy(database.workspace.system_directory)
     self.auto_sort_index = auto_sort_index
     self.sparse = sparse
     self.reference_database = reference_database
