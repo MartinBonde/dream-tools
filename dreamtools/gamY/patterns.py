@@ -1,31 +1,38 @@
 import re
 
+# Tidbits used to make regex-patterns more readable
+open_bracket = r"[\(\[]"
+close_bracket = r"[\)\]]"
+brackets = r"[\(\)\[\]]"
+no_brackets = r"[^\(\)\[\]]"
+ident = r"[A-Za-z0-9_]{1,62}" # A valid symbol in GAMS is a letter followed by up to 62 letters, numbers or underscores. gamY also accepts starting with a number or underscore.
+
 # Top level patterns for all commands. Used to recursively parse script.
 PATTERN_STRINGS = {
     # "env_variable": r"""(?:[^\s\*][^\n]*)?(\%(\S+?)\%)""",
-    "env_variable": r"""\%(\S+?)\%""",
+    "env_variable": fr"""\%({ident})\%""",
 
-    "user_function": r"""
-        @(\S+?)  # Function name
+    "user_function": fr"""
+        @({ident})  # Function name
         \(
             ([^)]*?)  # Arguments
         \)
     """,
 
-    "set": r"""
+    "set": fr"""
 
                 \$set(global|local|)
                 \s*
-                (\S+)
+                ({ident})
                 \s+
                 ([^\s\;]+)
             """,
 
-    "eval": r"""
+    "eval": fr"""
 
                 \$eval(global|local|)
                 \s*
-                (\S+)
+                ({ident})
                 \s+
                 ([^\;]+)
             """,
@@ -36,11 +43,11 @@ PATTERN_STRINGS = {
         ([^\s;]+)                # File name
     """,
 
-    "block": r"\$Block\s+(.+?)\s+(.*?)\$EndBlock",
+    "block": fr"\$Block\s+({ident})\s+(.*?)\$EndBlock",
 
-    "group": r"\$Group\s+(.+?)\s+(.*?;)",  # 1) name, 2) content
+    "group": fr"\$Group\s+({ident})\s+(.*?;)",  # 1) name, 2) content
 
-    "pgroup": r"\$PGroup\s+(.+?)\s+(.*?;)",
+    "pgroup": fr"\$PGroup\s+({ident})\s+(.*?;)",
 
     "display": r"""
         \$Display\s
@@ -52,15 +59,15 @@ PATTERN_STRINGS = {
             (.+?;)      # Variables and groups to be displayed
     """,
 
-    "model": r"\$Model\s+(.+?)\s+(.*?);",
+    "model": fr"\$Model\s+({ident})\s+(.*?);",
 
     "solve": r"\$Solve\s+(.*?);",
 
-    "fix": r"""
+    "fix": fr"""
                         (\$(?:UN)?FIX)          # Fix or unfix command
-                        (?:[(\[] (
+                        (?:{open_bracket} (
                             -? (?:\d+\.?\d*|INF|EPS) (?: \,\s*-?(?:\d+\.?\d*|INF|EPS) )?       # Optional arguments
-                        ) [)\]])?
+                        ) {close_bracket})?
                         \s+
                         (.+?;)                  # Content
                     """,
@@ -74,18 +81,16 @@ PATTERN_STRINGS = {
                     \$EndIF(?P=if_id)\b
                 """,
 
-    "define_function": r"""
-
+    "define_function": fr"""
                         \$Function(?P<function_id>\d*)\s+
-                        (\S+?)        # Name $1
-                        [(\[]([^)\]]*)[)\]]  # Arguments  $2
+                        ({ident})        # Name $1
+                        {open_bracket}([^)\]]*){close_bracket}  # Arguments  $2
                         (?:\:)?\s+
                         (.*?)         # Expression $3
                         \$EndFunction(?P=function_id)\b
     """,
 
     "for_loop": r"""
-
                         \$For(?P<for_id>\d*)
                         \s+
                         (.+?) # The iterator
@@ -98,38 +103,38 @@ PATTERN_STRINGS = {
                         \$EndFor(?P=for_id)\b
     """,
 
-
-    "loop": r"""
+    "loop": fr"""
                         \$Loop(?P<loop_id>\d*)
                         \s*
-                        (.*?)               # Group name
+                        ({ident})               # Group name
                         [:]
                         (.*?)
                         \$EndLoop(?P=loop_id)\b
                     """,
-    "replace": r"""
+
+    "replace": fr"""
                         \$Replace
-                        [(\[]
+                        {open_bracket}
                         ('.*?'|".*?")       # String to find
                         ,\s*
                         ('.*?'|".*?")       # Replacement string
                         (,\s*\d+)?          # Max replacements
-                        [)\]]
+                        {close_bracket}
                         (.*?)
                         \$EndReplace
                     """,
-    "regex": r"""
+
+    "regex": fr"""
                         \$Regex(?P<regex_id>\d*)
-                        [(\[]\s*
+                        {open_bracket}\s*
                         ('.*?'|".*?"|[^,]+)       # String to find
                         ,\s*
                         ('.*?'|".*?")             # Replacement string
                         (,\s*\d+)?                # Max replacements
-                        [)\]]
+                        {close_bracket}
                         (.*?)
                         \$EndRegex(?P=regex_id)\b
                     """,
-
 }
 
 # Compile regex patterns

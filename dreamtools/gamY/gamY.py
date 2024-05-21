@@ -94,10 +94,11 @@ Save/Read options
   $EndIf
 Implementation notes
   The preprocessor uses 'brute force' regular expressions to find and replace the new macro commands.
+  It is highly recommended to use an AI to understand or modify any regular expression patterns.
   Commands are processed in the order they appear and can be nested (using recursive descent parsing).
   A tokenizer is not used and is unlikely to simplify the code as syntax varies for each command,
   and only the commands, rather than all the GAMS code, need to be parsed.
-  The program should be rewritten using a tokenizer, lexer, and parser to allow for unlimited nesting of flow control statements,
+  The program can be rewritten using a tokenizer, lexer, and parser to allow for unlimited nesting of flow control statements,
   and to make the syntax more robust.
 """
 import sys
@@ -116,7 +117,7 @@ import itertools # Useful in FOR loops in MAKRO
 from .classes import Variable, Equation, Function, MockMatch, Group, Block, CaseInsensitiveDict
 
 #  The regex patterns used to match commands
-from .patterns import PATTERNS
+from .patterns import PATTERNS, open_bracket, close_bracket, brackets, no_brackets, ident
 
 # global gamY settings
 leave_env_variables_for_gams = False
@@ -541,11 +542,12 @@ class Precompiler:
     jr_eq1.L[t] = 0;
     E_eq1[t].. v1[t] =E= (1+jr_eq1[t]) * (j_eq1[t] + v2);
     """
-    equation_pattern = re.compile(r"""
+    equation_pattern = re.compile(fr"""
       (?:^|\,)             #  Check only beginning of line or after a comma.
       \s*                  #  Ignore whitespace
-      ([^#*\s\(\[]+)         #  Name of equation
-      ([(\[][^$]+?[)\]])?        #  Sets
+      ({ident})         #  Name of equation
+      
+      ({open_bracket}[^$]+?{close_bracket})?        #  Sets
       \s*
       (\$.+?)?              #  Set restrictions
       \s*
@@ -614,12 +616,12 @@ class Precompiler:
       E_eq
     ;
     """
-    item_pattern = re.compile(r"""
+    item_pattern = re.compile(fr"""
       (?:^|\,)             #  Check only beginning of line or after a comma.
       \s*                  #  Ignore whitespace
       (\-)?                #  Optional MINUS character if block or equation is to be removed instead of added ($1)
-      ([^\,\;\s]+)         #  Name of equation ($2)
-    """, re.VERBOSE | re.MULTILINE)
+      ({ident})            #  Name of equation ($2)
+    """, re.VERBOSE | re.MULTILINE | re.IGNORECASE)
 
     equations = CaseInsensitiveDict({eq.name: eq for block in self.blocks.values() for eq in block.values()})
     model_name = match.group(1)
@@ -701,20 +703,20 @@ class Precompiler:
       G_oldGroup
     ;
     """
-    group_variable_pattern = re.compile(r"""
+    group_variable_pattern = re.compile(fr"""
       (?:^|\,)              #  Check only beginning of line or after a comma.
       \s*                   #  Ignore whitespace
       (\-)?                 #  Optional MINUS character, if group or variable should be removed rather than added ($1)
       \s*
-      ([^$#*\s(\[,]+)    #  Name of variable ($2)
-      ([(\[].*?[)\]])?            #  Optional sets  ($3)
-      (\$[(\[].+?[)\]])?          #  Optional conditions  ($4)
+      ({ident})             #  Name of variable ($2)
+      ({open_bracket}{no_brackets}+?{close_bracket})? #  Optional sets  ($3)
+      (\${open_bracket}.+?{close_bracket})?           #  Optional conditions  ($4)
       \s*
       ('.*?'|".*?")?        #  Optional label  ($5)
       (\s+-?\d+(?:\.\d*)?)? #  Optional initial value of variable  ($6)
       \s*
       (?=[\n\,\;])          #  Variable separator (comma or new line)
-    """, re.VERBOSE | re.MULTILINE)
+    """, re.VERBOSE | re.MULTILINE | re.IGNORECASE)
 
     if parameter_group:
       GROUPS = self.pgroups
@@ -1126,9 +1128,9 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
       p_name = "report__" + var.sets.replace(",", "_").replace(" ", "")[1:-1]
       if (priority, p_name) not in report:
         if var.sets == "":
-          replacement_text += "parameter {};\n".format(p_name)
+          replacement_text += f"parameter {p_name};\n"
         else:
-          replacement_text += "parameter {}{}, *];\n".format(p_name, var.sets[:-1])
+          replacement_text += f"parameter {p_name}[{var.sets[1:-1]}, *];\n"
         heappush(report, (priority, p_name))
       EPS_or_zero = "0";
       sets = var.sets[1:-1]
