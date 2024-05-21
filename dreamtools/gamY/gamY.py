@@ -118,6 +118,11 @@ from .classes import Variable, Equation, Function, MockMatch, Group, Block, Case
 #  The regex patterns used to match commands
 from .patterns import PATTERNS
 
+# global gamY settings
+leave_env_variables_for_gams = False
+automatic_additive_residuals_prefix = None
+automatic_multiplicative_residuals_prefix = None
+error_on_missing_label = False
 
 def get_lst_path(file_path):
   """Return the path to the LST file corresponding to the GAMS file"""
@@ -145,8 +150,15 @@ class Precompiler:
     self.has_read_file = False
 
     self.adjustment_terms = []
-    self.add_adjust = add_adjust
-    self.mult_adjust = mult_adjust
+    if add_adjust is not None:
+      self.add_adjust = add_adjust
+    else:
+      self.add_adjust = automatic_additive_residuals_prefix
+    if mult_adjust is not None:
+      self.mult_adjust = mult_adjust
+    else:
+      self.mult_adjust = automatic_multiplicative_residuals_prefix
+    
     if add_adjust:
       self.adjustment_terms.append(add_adjust)
     if mult_adjust:
@@ -361,7 +373,7 @@ class Precompiler:
     in_scope = {k: v for k, v in in_scope.items()}
     return in_scope
 
-  def set_env_variable(self, match, text, eval_command=False):
+  def set_env_variable(self, match, text, eval_command=False, leave_command_for_GAMS=None):
     """
     Read $set, $setglobal, and $setlocal commands
     The commands are left intact to also be processed by GAMS
@@ -374,9 +386,13 @@ class Precompiler:
       self.globals[key] = val
     else:
       self.locals[key] = val
-    # replacement_text = match.group(0).replace("$", self.DOLLAR_SUB).lstrip()
-    # return replacement_text
-    return ""
+    if leave_command_for_GAMS is None:
+      leave_command_for_GAMS = leave_env_variables_for_gams
+    if leave_command_for_GAMS:
+      replacement_text = match.group(0).replace("$", self.DOLLAR_SUB).lstrip()
+    else:
+      replacement_text = ""
+    return replacement_text
 
   def eval(self, match, text):
     return self.set_env_variable(match, text, eval_command=True)
@@ -738,8 +754,8 @@ class Precompiler:
         variables = (Variable(name, sets, label),)
         old_group_conditions = {}
         if not parameter_group and not label:
-          self.warning(
-            f"{name} was defined as a new variable without an explanatory text in group {group_name} (this might be due to a typo).")
+          f = self.error if error_on_missing_label else self.warning
+          f(f"{name} was defined as a new variable without an explanatory text in group {group_name} (this might be due to a typo).")
 
       for var in variables:
         if sets and "$" in sets:
@@ -1278,7 +1294,7 @@ def run(file_path, r=None, s=None, shell=False, **kwargs):
 
   start_time = timer()
 
-  precompiler = Precompiler(file_path, add_adjust=None, mult_adjust=None)
+  precompiler = Precompiler(file_path)
 
   expanded_dir = os.path.join(precompiler.file_dir, "Expanded")
   parsed_file_path = os.path.join(expanded_dir, precompiler.file_name.replace(".gms", ".gmy"))
