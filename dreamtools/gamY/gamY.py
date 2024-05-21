@@ -113,10 +113,20 @@ from timeit import default_timer as timer
 import itertools # Useful in FOR loops in MAKRO
 
 # gamY data objects
-from classes import Variable, Equation, Function, MockMatch, Group, Block, CaseInsensitiveDict
+from .classes import Variable, Equation, Function, MockMatch, Group, Block, CaseInsensitiveDict
 
 #  The regex patterns used to match commands
-from patterns import PATTERNS
+from .patterns import PATTERNS
+
+
+def get_lst_path(file_path):
+  """Return the path to the LST file corresponding to the GAMS file"""
+  file_dir, file_name = os.path.split(file_path)
+  list_file_dir = os.path.join(file_dir, "LST")
+  if not os.path.exists(list_file_dir):
+    os.makedirs(list_file_dir)
+  list_file_name = file_name.replace(".gms", ".lst")
+  return os.path.join(list_file_dir, list_file_name)
 
 
 class Precompiler:
@@ -151,12 +161,7 @@ class Precompiler:
     self.file_path = os.path.abspath(file_path)
     self.file_dir, self.file_name = os.path.split(self.file_path)
 
-    # Check that LST folder exists
-    list_file_dir = os.path.join(self.file_dir, "LST")
-    if not os.path.exists(list_file_dir):
-      os.makedirs(list_file_dir)
-    list_file_name = self.file_name.replace(".gms", ".lst")
-    self.list_file_path = os.path.join(list_file_dir, list_file_name)
+    self.list_file_path = get_lst_path(self.file_path)
 
     #  In cases where a command should be parsed by gamY, but also left for GAMS to parse, we replace special characters temporarily
     self.DOLLAR_SUB = "¤dollar¤"
@@ -213,7 +218,7 @@ class Precompiler:
     sys.exit(error_text)
 
   def __call__(self):
-    #  Read GAMS file
+    """Read GAMS file"""
     with open(self.file_path, 'r') as f:
       text = "\n" + f.read()
     if not self.has_read_file:
@@ -222,7 +227,8 @@ class Precompiler:
     text = self.parse(text, top_level=True)
     text = self.processed_text + text
     text = self.dedent_dollar(text)
-    return self.restore_temporary_substitutions(text)
+    text = self.restore_temporary_substitutions(text)
+    return text
 
   def parse(self, text, top_level=False):
     while True:
@@ -329,7 +335,7 @@ class Precompiler:
     if key in in_scope:
       return in_scope[key]
     else:
-      self.warning(f"\%{key}\% is not defined and was not replaced")
+      self.warning(f"\\%{key}\\% is not defined and was not replaced")
       return self.PERCENT_SUB + key + self.PERCENT_SUB
 
   def user_function(self, match, text):
@@ -649,6 +655,25 @@ class Precompiler:
 
     return replacement_text
 
+  def sets_to_conditions(self, set, var, item_conditions):
+    """
+    Used in Group defition to turn sub-sets into dollar-conditons
+    x[a,b]
+    x[a1,'b']$(a2[a1]) -> x[a,b]$(a1[a] and sameas['b',b] and a2[a])
+    """
+    condition_sets = set[1:-1].split(",")
+    definition_sets = var.sets[1:-1].split(",")
+    for con_set, def_set in zip(condition_sets, definition_sets):
+      if con_set == def_set:
+        continue
+      if item_conditions:
+        item_conditions = re.sub(fr"\b{con_set}\b", def_set, item_conditions, flags=re.IGNORECASE)
+      if "'" in con_set or '"' in con_set:
+        item_conditions = self.combine_conditions(item_conditions, f"sameas({con_set},{def_set})")
+      else:
+        item_conditions = self.combine_conditions(item_conditions, f"{con_set}[{def_set}]")
+    return item_conditions
+
   def group_define(self, match, text, init_val="0", parameter_group=False):
     """
     Parse $GROUP command
@@ -721,6 +746,9 @@ class Precompiler:
           self.error(
             f"""Conditionals in the GROUP statement must be surrounded by parentheses, e.g. $(d1[d]).
 Error in {group_name}: {name}{sets}{item_conditions}""")
+
+        if sets and (sets != var.sets):
+          item_conditions = self.sets_to_conditions(sets, var, item_conditions)
 
         if remove:
           if var.name not in new_group:
@@ -1220,88 +1248,80 @@ def is_enclosed(expression):
   return True
 
 
-def cmd_call():
-  start_time = timer()
+def find_gams():
+    """
+    Find GAMS executable
+    """
+    gams_path = os.environ.get("GAMS") or os.environ.get("gams") or shutil.which("GAMS") or shutil.which("gams")
+    
+    if not gams_path:
+      sys.exit("ERROR: gamY could not find GAMS. Set GAMS path as environmental variable with variable name GAMS")
+    
+    return gams_path
 
-  # Read any execution paremeters
-  args = sys.argv
-  if len(args) < 2 or args[1][-4:] != ".gms":
-    raise ValueError("No .gms file specified")
-  else:
-    file_path = args[1]
+
+def run(file_path, r=None, s=None, shell=False, **kwargs):
+  """
+  Run a GAMS file after precompiling it with optional adjustments.
+
+  Parameters:
+  - file_path (str): Path to the GAMS file to be precompiled and executed.
+  - r (str, optional): Optional argument to read the gamY data structure.
+  - s (str, optional): Optional argument to save the gamY data structure.
+  - shell (bool, optional): If True, the command will be executed through the shell.
+  - **kwargs: Additional keyword arguments to be passed to the GAMS executable.
+
+  Raises:
+  - AssertionError: If the GAMS executable is not found or if the provided path is not an executable.
+  - Exception: If there is an error in GAMS execution.
+  """
+
+  start_time = timer()
 
   precompiler = Precompiler(file_path, add_adjust=None, mult_adjust=None)
 
-  # Read optional command line arguments
-  save_file, gams_path = None, None
-  for arg in args:
-    #  Read blocks, groups, and variables from saved file if the r=<file_path> option is used.
-    if arg[:2] == "r=":
-      precompiler.read(arg[2:])
+  expanded_dir = os.path.join(precompiler.file_dir, "Expanded")
+  parsed_file_path = os.path.join(expanded_dir, precompiler.file_name.replace(".gms", ".gmy"))
 
-    #  Save definitions if s=<file_path> is used
-    elif arg[:2] == "s=":
-      save_file = arg[2:]
+  call_parameters = [find_gams(), parsed_file_path]
 
-    #  Transfer command line parameters to data structure
-    elif arg[:2] == "--":
-      assert "=" in arg[2:], f"'{arg}' command line parameter starts with '--' but does not contain a '=' symbol."
-      k, v = arg[2:].split(sep="=")
-      precompiler.locals[k] = v
+  if r is not None: # Read gamY data structure if gamY is called with r= argument and pass r= argument to GAMS
+    precompiler.read(r)
+    call_parameters.append(f"r={r}")
 
-    #  Get gams from command line arguments
-    elif arg[:5].lower() == "gams=":
-      gams_path = arg[5:]
-
-  #  Find GAMS program if it was not set as command line argument
-  if not gams_path:
-    if "GAMS" in os.environ:
-      gams_path = os.environ["GAMS"]
-    else:
-      gams_path = shutil.which("GAMS")
-    if not gams_path:
-      sys.exit("ERROR: gamY could not not find GAMS. Set GAMS path as environmental variable with variable name GAMS")
-  else:
-    #  Clean path for common errors
-    while gams_path[0] in ["'",'"'," "]:
-      gams_path = gams_path[1:]
-    while gams_path[-1] in ["'",'"'," "]:
-      gams_path = gams_path[:-1]
-    if gams_path[-4:] != ".exe":
-      sys.exit("ERROR: " + gams_path + " is not an executable file. Make sure GAMS path is correctly set.")
+  for k, v in kwargs.items():
+    precompiler.locals[k] = v
+    call_parameters.append(f"--{k}={v}")
 
   #  Parse file using recursive descent
   text = precompiler()
 
-  if save_file: # Save gamY data structure if gamY is called with s= argument
-    precompiler.save(save_file)
+  if s is not None: # Save gamY data structure if gamY is called with s= argument and pass s= argument to GAMS
+    precompiler.save(s)
+    call_parameters.append(f"s={s}")
 
   #  Save pre-compiled GAMS file in 'Expanded' folder
-  expanded_dir = os.path.join(precompiler.file_dir, "Expanded")
-  if not os.path.exists(expanded_dir):
-    os.makedirs(expanded_dir)
-  new_file = os.path.join(expanded_dir, precompiler.file_name.replace(".gms", ".gmy"))
-  with open(new_file, 'w') as f:
+  os.makedirs(expanded_dir, exist_ok=True)
+  with open(parsed_file_path, 'w') as f:
     f.write(text)
 
   compilation_time = timer() - start_time
 
   #  Run file using GAMS (path needs to be set for system or user)
   prev_line = ""
-  call_parameters = [
+  call_parameters += [
     "LO=3",
-    "Workdir=" + precompiler.file_dir,
-    "CurDir=" + precompiler.file_dir,
+    f"Workdir={precompiler.file_dir}",
+    f"CurDir={precompiler.file_dir}",
     "ErrMsg=1",
-    "O=" + precompiler.list_file_path,
+    f"O={precompiler.list_file_path}",
     "pageSize=0",
     "pageWidth=9999",
   ]
-  call_parameters += [arg for arg in args[2:] if (arg[:5] != "gams=")]
   process = subprocess.Popen(
-    [gams_path, new_file, *call_parameters],
+    call_parameters,
     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-    universal_newlines=True, shell=True
+    universal_newlines=True, shell=shell
   )
 
   while process.poll() is None:
@@ -1313,156 +1333,74 @@ def cmd_call():
   sys.stdout.write(prev_line)
   sys.stdout.flush()
 
-#  Print errors and messages from listing file (lines starting with ****)
-  error_pattern = re.compile(r"^(\*{4}.+)", re.MULTILINE)
-  model_pattern = re.compile(r"(?<=Model Statistics    SOLVE |Model Analysis      SOLVE )\S+", re.MULTILINE)
-  with open(precompiler.list_file_path, 'r') as f:
-    for line in f:
-      if error_pattern.match(line):
-        print(error_pattern.match(line).group(0))
-      elif model_pattern.search(line):
-        print("")
-        print(model_pattern.search(line).group(0))
+  print(get_status_from_lst(precompiler.list_file_path))
 
   execution_time = timer() - start_time - compilation_time
-  print("Precompiler time: %.2f seconds" % compilation_time)
-  print("Execution time: %.2f seconds" % execution_time)
-  print("Total run time: %.2f seconds" % (execution_time + compilation_time))
-  #  print("Return code: %i" % process.returncode)
-
-  sys.exit(process.returncode)
-
-def py_call(args):
-  start_time = timer()
-
-  # Read any execution paremeters
-  if len(args) < 2 or args[1][-4:] != ".gms":
-    raise ValueError("No .gms file specified")
-  else:
-    file_path = args[1]
-
-  precompiler = Precompiler(file_path, add_adjust=None, mult_adjust=None)
-
-  # Read optional command line arguments
-  save_file, gams_path = None, None
-  for arg in args:
-    #  Read blocks, groups, and variables from saved file if the r=<file_path> option is used.
-    if arg[:2] == "r=":
-      precompiler.read(arg[2:])
-
-    #  Save definitions if s=<file_path> is used
-    elif arg[:2] == "s=":
-      save_file = arg[2:]
-
-    #  Transfer command line parameters to data structure
-    elif arg[:2] == "--":
-      assert "=" in arg[2:], f"'{arg}' command line parameter starts with '--' but does not contain a '=' symbol."
-      k, v = arg[2:].split(sep="=")
-      precompiler.locals[k] = v
-
-    #  Get gams from command line arguments
-    elif arg[:5].lower() == "gams=":
-      gams_path = arg[5:]
-
-  #  Find GAMS program if it was not set as command line argument
-  if not gams_path:
-    if "GAMS" in os.environ:
-      gams_path = os.environ["GAMS"]
-    else:
-      gams_path = shutil.which("GAMS")
-    if not gams_path:
-      sys.exit("ERROR: gamY could not not find GAMS. Set GAMS path as environmental variable with variable name GAMS")
-  else:
-    #  Clean path for common errors
-    while gams_path[0] in ["'",'"'," "]:
-      gams_path = gams_path[1:]
-    while gams_path[-1] in ["'",'"'," "]:
-      gams_path = gams_path[:-1]
-    if gams_path[-4:] != ".exe":
-      sys.exit("ERROR: " + gams_path + " is not an executable file. Make sure GAMS path is correctly set.")
-
-  #  Parse file using recursive descent
-  text = precompiler()
-
-  if save_file: # Save gamY data structure if gamY is called with s= argument
-    precompiler.save(save_file)
-
-  #  Save pre-compiled GAMS file in 'Expanded' folder
-  expanded_dir = os.path.join(precompiler.file_dir, "Expanded")
-  if not os.path.exists(expanded_dir):
-    os.makedirs(expanded_dir)
-  new_file = os.path.join(expanded_dir, precompiler.file_name.replace(".gms", ".gmy"))
-  with open(new_file, 'w') as f:
-    f.write(text)
-
-  compilation_time = timer() - start_time
-
-  #  Run file using GAMS (path needs to be set for system or user)
-  prev_line = ""
-  call_parameters = [
-    "LO=3",
-    "Workdir=" + precompiler.file_dir,
-    "CurDir=" + precompiler.file_dir,
-    "ErrMsg=1",
-    "O=" + precompiler.list_file_path,
-    "pageSize=0",
-    "pageWidth=9999",
-  ]
-  call_parameters += [arg for arg in args[2:] if (arg[:5] != "gams=")]
-  process = subprocess.Popen(
-    [gams_path, new_file, *call_parameters],
-    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-    universal_newlines=True, shell=False
-  )
-
-  while process.poll() is None:
-    for line in iter(process.stdout.readline, ""):
-      if not (line[:3] == "---" and prev_line[:10] == line[:10]):  # For almost identical lines, only print the last one
-        sys.stdout.write(prev_line)
-        sys.stdout.flush()
-      prev_line = line
-  sys.stdout.write(prev_line)
-  sys.stdout.flush()
-
-#  Print errors and messages from listing file (lines starting with ****)
-  error_pattern = re.compile(r"^(\*{4}.+)", re.MULTILINE)
-  model_pattern = re.compile(r"(?<=Model Statistics    SOLVE |Model Analysis      SOLVE )\S+", re.MULTILINE)
-  with open(precompiler.list_file_path, 'r') as f:
-    for line in f:
-      if error_pattern.match(line):
-        print(error_pattern.match(line).group(0))
-      elif model_pattern.search(line):
-        print("")
-        print(model_pattern.search(line).group(0))
-
-  execution_time = timer() - start_time - compilation_time
-  print("Precompiler time: %.2f seconds" % compilation_time)
-  print("Execution time: %.2f seconds" % execution_time)
-  print("Total run time: %.2f seconds" % (execution_time + compilation_time))
-  #  print("Return code: %i" % process.returncode)
+  print(f"Precompiler time: {compilation_time:.2f} seconds")
+  print(f"Execution time: {execution_time:.2f} seconds")
+  print(f"Total run time: {execution_time + compilation_time:.2f} seconds")
 
   process.terminate() # terminate process
   process.wait()
+  
+  if shell:
+    sys.exit(process.returncode)
+  elif process.returncode != 0:
+    raise Exception(f"Error in GAMS execution. Return code: {process.returncode}")
 
-def gams_error(gams_file, check_error=False):
-    print(f"Error messages for {gams_file}")
-    lst_path = f"LST\\{gams_file[:-4]}.lst"
-    with open(lst_path, mode='r') as lst:
-      for line in lst.readlines():
-          if '****' in line:
-              print(line)
-          if check_error:
-              errors = [
-                '**** USER ERROR(S) ENCOUNTERED',
-                '** Infeasible solution to a square system',
-                'Locally Infeasible',
-                'Terminated By Solver',
-                'Solver Failure',
-                "**** MODEL STATUS      6 Intermediate Infeasible",
-              ]
-              for error in errors:
-                  if error in line:
-                    raise RuntimeError(f"Error in {gams_file}:\n{line}")
+
+status_message_patterns = [
+  "****",
+  "Model Statistics    SOLVE",
+  "SINGLE =E|X= EQUS",
+]
+
+error_message_patterns = [
+  "USER ERROR(S) ENCOUNTERED",
+  "** Infeasible solution to a square system",
+  "Locally Infeasible",
+  "Terminated By Solver",
+  "Solver Failure",
+  "Intermediate Infeasible",
+]
+
+status_message_exclude_patterns = [
+  "**** REPORT FILE SUMMARY",
+  "**** FILE SUMMARY",
+  "**** WARNING - COMPILER OPTIONS ARE NON DEFAULT",
+]
+
+def get_status_from_lst(list_file_path):
+  """Extract status messages from the listing file (lines starting with ****)"""
+  with open(list_file_path, 'r') as f:
+      status_messages = [
+          line for line in f
+          if any(line.startswith(pattern) for pattern in status_message_patterns + error_message_patterns)
+          and not any(line.startswith(exclude_pattern) for exclude_pattern in status_message_exclude_patterns)
+      ]
+  return "\n" + "".join(status_messages)
+
+def print_status(gams_file):
+  print(get_status_from_lst(get_lst_path(gams_file)))
+
+
+def cmd_call():
+  """Wrapper for calling gamY from command line."""
+  # Translate command line arguments to key-word arguments for the run function
+  cmd_args = sys.argv
+  kwargs = {"file_path": cmd_args[1]}
+
+  # Read optional command line arguments
+  for arg in cmd_args[2:]:
+    # Remove the '--' prefix if it exists
+    if arg.startswith("--"):
+      arg = arg[2:]
+    # Split the argument into key and value
+    key, value = arg.split("=", 1)
+    kwargs[key] = value
+
+  return run(**kwargs, shell=True)
+
 
 if __name__ == "__main__":
   cmd_call()

@@ -180,6 +180,13 @@ def test_export_variable_with_changes():
   old, new = dt.Gdx("test.gdx"), dt.Gdx("test_export.gdx")
   assert all(old["qY"] * 2 == new["qY"])
 
+def test_export_parameter_with_changes():
+  db = dt.Gdx("test.gdx")
+  db["growth_factor"] = db["growth_factor"] * 2
+  db.export("test_export.gdx", relative_path=True)
+  old, new = dt.Gdx("test.gdx"), dt.Gdx("test_export.gdx")
+  assert all(old["growth_factor"] * 2 == new["growth_factor"])
+
 def test_export_scalar_with_changes():
   db = dt.Gdx("test.gdx")
   db["eHh"] = db["eHh"] * 2
