@@ -94,10 +94,11 @@ Save/Read options
   $EndIf
 Implementation notes
   The preprocessor uses 'brute force' regular expressions to find and replace the new macro commands.
+  It is highly recommended to use an AI to understand or modify any regular expression patterns.
   Commands are processed in the order they appear and can be nested (using recursive descent parsing).
   A tokenizer is not used and is unlikely to simplify the code as syntax varies for each command,
   and only the commands, rather than all the GAMS code, need to be parsed.
-  The program should be rewritten using a tokenizer, lexer, and parser to allow for unlimited nesting of flow control statements,
+  The program can be rewritten using a tokenizer, lexer, and parser to allow for unlimited nesting of flow control statements,
   and to make the syntax more robust.
 """
 import sys
@@ -116,8 +117,13 @@ import itertools # Useful in FOR loops in MAKRO
 from .classes import Variable, Equation, Function, MockMatch, Group, Block, CaseInsensitiveDict
 
 #  The regex patterns used to match commands
-from .patterns import PATTERNS
+from .patterns import PATTERNS, open_bracket, close_bracket, brackets, no_brackets, ident
 
+# global gamY settings
+leave_env_variables_for_gams = False
+automatic_additive_residuals_prefix = None
+automatic_multiplicative_residuals_prefix = None
+error_on_missing_label = False
 
 def get_lst_path(file_path):
   """Return the path to the LST file corresponding to the GAMS file"""
@@ -145,8 +151,15 @@ class Precompiler:
     self.has_read_file = False
 
     self.adjustment_terms = []
-    self.add_adjust = add_adjust
-    self.mult_adjust = mult_adjust
+    if add_adjust is not None:
+      self.add_adjust = add_adjust
+    else:
+      self.add_adjust = automatic_additive_residuals_prefix
+    if mult_adjust is not None:
+      self.mult_adjust = mult_adjust
+    else:
+      self.mult_adjust = automatic_multiplicative_residuals_prefix
+    
     if add_adjust:
       self.adjustment_terms.append(add_adjust)
     if mult_adjust:
@@ -361,7 +374,7 @@ class Precompiler:
     in_scope = {k: v for k, v in in_scope.items()}
     return in_scope
 
-  def set_env_variable(self, match, text, eval_command=False):
+  def set_env_variable(self, match, text, eval_command=False, leave_command_for_GAMS=None):
     """
     Read $set, $setglobal, and $setlocal commands
     The commands are left intact to also be processed by GAMS
@@ -374,9 +387,13 @@ class Precompiler:
       self.globals[key] = val
     else:
       self.locals[key] = val
-    # replacement_text = match.group(0).replace("$", self.DOLLAR_SUB).lstrip()
-    # return replacement_text
-    return ""
+    if leave_command_for_GAMS is None:
+      leave_command_for_GAMS = leave_env_variables_for_gams
+    if leave_command_for_GAMS:
+      replacement_text = match.group(0).replace("$", self.DOLLAR_SUB).lstrip()
+    else:
+      replacement_text = ""
+    return replacement_text
 
   def eval(self, match, text):
     return self.set_env_variable(match, text, eval_command=True)
@@ -525,11 +542,12 @@ class Precompiler:
     jr_eq1.L[t] = 0;
     E_eq1[t].. v1[t] =E= (1+jr_eq1[t]) * (j_eq1[t] + v2);
     """
-    equation_pattern = re.compile(r"""
+    equation_pattern = re.compile(fr"""
       (?:^|\,)             #  Check only beginning of line or after a comma.
       \s*                  #  Ignore whitespace
-      ([^#*\s\(\[]+)         #  Name of equation
-      ([(\[][^$]+?[)\]])?        #  Sets
+      ({ident})         #  Name of equation
+      
+      ({open_bracket}[^$]+?{close_bracket})?        #  Sets
       \s*
       (\$.+?)?              #  Set restrictions
       \s*
@@ -598,12 +616,12 @@ class Precompiler:
       E_eq
     ;
     """
-    item_pattern = re.compile(r"""
+    item_pattern = re.compile(fr"""
       (?:^|\,)             #  Check only beginning of line or after a comma.
       \s*                  #  Ignore whitespace
       (\-)?                #  Optional MINUS character if block or equation is to be removed instead of added ($1)
-      ([^\,\;\s]+)         #  Name of equation ($2)
-    """, re.VERBOSE | re.MULTILINE)
+      ({ident})            #  Name of equation ($2)
+    """, re.VERBOSE | re.MULTILINE | re.IGNORECASE)
 
     equations = CaseInsensitiveDict({eq.name: eq for block in self.blocks.values() for eq in block.values()})
     model_name = match.group(1)
@@ -685,20 +703,20 @@ class Precompiler:
       G_oldGroup
     ;
     """
-    group_variable_pattern = re.compile(r"""
+    group_variable_pattern = re.compile(fr"""
       (?:^|\,)              #  Check only beginning of line or after a comma.
       \s*                   #  Ignore whitespace
       (\-)?                 #  Optional MINUS character, if group or variable should be removed rather than added ($1)
       \s*
-      ([^$#*\s(\[,]+)    #  Name of variable ($2)
-      ([(\[].*?[)\]])?            #  Optional sets  ($3)
-      (\$[(\[].+?[)\]])?          #  Optional conditions  ($4)
+      ({ident})             #  Name of variable ($2)
+      ({open_bracket}{no_brackets}+?{close_bracket})? #  Optional sets  ($3)
+      (\${open_bracket}.+?{close_bracket})?           #  Optional conditions  ($4)
       \s*
       ('.*?'|".*?")?        #  Optional label  ($5)
       (\s+-?\d+(?:\.\d*)?)? #  Optional initial value of variable  ($6)
       \s*
       (?=[\n\,\;])          #  Variable separator (comma or new line)
-    """, re.VERBOSE | re.MULTILINE)
+    """, re.VERBOSE | re.MULTILINE | re.IGNORECASE)
 
     if parameter_group:
       GROUPS = self.pgroups
@@ -738,8 +756,8 @@ class Precompiler:
         variables = (Variable(name, sets, label),)
         old_group_conditions = {}
         if not parameter_group and not label:
-          self.warning(
-            f"{name} was defined as a new variable without an explanatory text in group {group_name} (this might be due to a typo).")
+          f = self.error if error_on_missing_label else self.warning
+          f(f"{name} was defined as a new variable without an explanatory text in group {group_name} (this might be due to a typo).")
 
       for var in variables:
         if sets and "$" in sets:
@@ -1110,9 +1128,9 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
       p_name = "report__" + var.sets.replace(",", "_").replace(" ", "")[1:-1]
       if (priority, p_name) not in report:
         if var.sets == "":
-          replacement_text += "parameter {};\n".format(p_name)
+          replacement_text += f"parameter {p_name};\n"
         else:
-          replacement_text += "parameter {}{}, *];\n".format(p_name, var.sets[:-1])
+          replacement_text += f"parameter {p_name}[{var.sets[1:-1]}, *];\n"
         heappush(report, (priority, p_name))
       EPS_or_zero = "0";
       sets = var.sets[1:-1]
@@ -1278,7 +1296,7 @@ def run(file_path, r=None, s=None, shell=False, **kwargs):
 
   start_time = timer()
 
-  precompiler = Precompiler(file_path, add_adjust=None, mult_adjust=None)
+  precompiler = Precompiler(file_path)
 
   expanded_dir = os.path.join(precompiler.file_dir, "Expanded")
   parsed_file_path = os.path.join(expanded_dir, precompiler.file_name.replace(".gms", ".gmy"))
