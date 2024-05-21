@@ -12,7 +12,7 @@ setuptools.setup(
   version=__version__,
   author="Martin Kirk Bonde",
   author_email="martin@bonde.dk",
-  description="A collection of tools used by the Danish institute for economic modelling and forecasting, DREAM (http://dreammodel.dk).",
+  description="A collection of tools used by the Danish Research Institute for Economic Analysis and Modelling, DREAM (https://dreamgruppen.dk/).",
   long_description=long_description,
   long_description_content_type="text/markdown",
   url="https://github.com/MartinBonde/dream-tools",

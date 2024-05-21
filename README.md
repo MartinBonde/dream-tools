@@ -1,5 +1,5 @@
 # DREAM-tools
-A collection of tools used by [the Danish institute for economic modelling and forecasting, DREAM](http://dreammodel.dk).
+A collection of tools used by [DREAM, Danish Research Institute for Economic Analysis and Modelling](https://dreamgruppen.dk/).
 
 ## Gams-Pandas
 A wrapper around the [GAMS Python api](https://www.gams.com/latest/docs/API_PY_OVERVIEW.html) to move smoothly between GAMS and [Pandas](https://pandas.pydata.org/).
