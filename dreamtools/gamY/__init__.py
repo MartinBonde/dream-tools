@@ -1,1 +1,1 @@
-from .gamY import Precompiler
+from .gamY import *
