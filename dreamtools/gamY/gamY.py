@@ -1270,10 +1270,10 @@ def find_gams():
     """
     Find GAMS executable
     """
-    gams_path = os.environ.get("GAMS") or os.environ.get("gams") or shutil.which("GAMS") or shutil.which("gams")
+    gams_path = shutil.which("GAMS") or shutil.which("gams") or os.environ.get("GAMS") or os.environ.get("gams")
     
-    if not gams_path:
-      sys.exit("ERROR: gamY could not find GAMS. Set GAMS path as environmental variable with variable name GAMS")
+    if not os.path.isfile(gams_path):
+      sys.exit("ERROR: gamY could not find GAMS. Set path to gams executable as environmental variable with variable name GAMS (or gams)")
     
     return gams_path
 
