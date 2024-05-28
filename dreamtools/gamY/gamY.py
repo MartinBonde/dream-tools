@@ -202,7 +202,7 @@ class Precompiler:
       ("display_all", self.display_all),
       ("fix", self.fix_unfix),
     ]
-    self.top_down_commands = [  # Rememeber also to add these to the top down pattern in patterns.py
+    self.top_down_commands = [  # Remeber also to add these to the top down pattern in patterns.py
       ("define_function", self.define_function),
       ("env_variable", self.insert_env_variable),
       ("if", self.if_statements),
