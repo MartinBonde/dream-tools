@@ -550,8 +550,8 @@ class Precompiler:
     """Generate unique equation name based on the name, sets, and conditions of the associated endogenous variable."""
     suffix = self.sets_to_conditions(sets, var, conditions)
     # Remove sets denoted with square brackets, special characters, and whitespace
-    suffix = re.sub("\[.+?\]", "", suffix)
-    suffix = re.sub("[\$\(\)]", "", suffix)
+    suffix = re.sub(r"\[.+?\]", "", suffix)
+    suffix = re.sub(r"[\$\(\)]", "", suffix)
     suffix = re.sub(" ", "_", suffix)
     return f"{var.name}_{suffix}"
 
@@ -593,7 +593,7 @@ class Precompiler:
       "\n# " + "-"*100 + "\n"
     )
     self.blocks[block_name] = Block()
-    replacement_text += f"\n$GROUP {block_name}_endogenous empty_group_dummy;\n"
+    replacement_text += f"\n$GROUP {block_name}_endogenous ;\n"
     for equation_match in equation_pattern.finditer(content):
       eq_name, sets, conditions, LHS, RHS = (
         group if group is not None else "" for group in equation_match.groups()
@@ -668,7 +668,7 @@ class Precompiler:
       "\n# " + "-" * 100 +
       "\n#  Define " + model_name + " model" +
       "\n# " + "-" * 100 +
-      "\nModel " + model_name + " /\n"
+      "\nModel " + model_name
     )
     new_model = Block()
     for item_match in item_pattern.finditer(content):
@@ -692,9 +692,11 @@ class Precompiler:
       else:
         raise KeyError(name, " is not a valid equation, block of equations, or model")
 
-    for eq in new_model.values():
-      replacement_text += eq.name + ", "
-    replacement_text = replacement_text[:-2] + "\n/;\n"
+    if new_model: # If the model is not empty
+      replacement_text += " / \n"
+      replacement_text += ", ".join([eq.name for eq in new_model.values()])
+      replacement_text += "\n /"
+    replacement_text += ";"
 
     #  Define an equation block, so that the model can be used in the same ways a regular blocks
     self.blocks[model_name] = new_model
