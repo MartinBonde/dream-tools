@@ -141,7 +141,7 @@ from .patterns import PATTERNS, open_bracket, close_bracket, brackets, no_bracke
 leave_env_variables_for_gams = False
 automatic_additive_residuals_prefix = None
 automatic_multiplicative_residuals_prefix = None
-error_on_missing_label = False
+error_on_missing_label = True
 block_equations_suffix = ""
 require_variable_with_equation = False
 
