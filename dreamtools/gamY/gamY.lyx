@@ -3348,7 +3348,7 @@ The pre-processor is a prototype and uses 'brute force' regular expressions
 
 \begin_layout Section
 \noindent
-Exercise 1 - A small Reform Model 
+Exercise - A small multi-sector CGE model
 \end_layout
 
 \begin_layout Subsection
@@ -3358,7 +3358,7 @@ The Model
 
 \begin_layout Standard
 \noindent
-This exercise shows how to setup and solve a small multisector model for
+This exercise shows how to setup and solve a small multi-sector model for
  a closed economy.
 \begin_inset Foot
 status open

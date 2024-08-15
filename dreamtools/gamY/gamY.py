@@ -21,44 +21,59 @@ Available commands:
     Variable elements can be selectively included in a group using dollar conditions. Note that conditions ALWAYS need to be enclosed in round brackets.
     Groups can be added together (union operation) or removed (complement operation).
     Example:
-    $GROUP G_newGroup
-      var1[t]   "label for variable 1"
-      var2[a,t]$(a.val >= 18) "label for variable 2"
-      G_oldGroup
-      var3[a,t], -var3$(a.val < 18)  # Equivalent to var2
-    ;
+      $GROUP G_newGroup
+        var1[t]   "label for variable 1"
+        var2[a,t]$(a.val >= 18) "label for variable 2"
+        G_oldGroup
+        var3[a,t], -var3$(a.val < 18)  # Equivalent to var2
+      ;
+
   $BLOCK <block name> <equations> $ENDBLOCK
     A block is a data structure containing equations.
     New equations should always be defined using the $BLOCK command rather than a GAMS EQUATIONS statement.
     The block command bundles together equations so that they can be manipulated together more easily, using other gamY commands such as $LOOP or $MODEL.
     Example:
-    $BLOCK B_myBlock
-      E_eq1[t].. v1[t] =E= v2;
-    $EndBlock
+      $BLOCK B_myBlock
+        E_eq1[t].. v1[t] =E= v2;
+      $EndBlock
+
+    Instead of manually providing a unique equation identifier, the user may instead explicitly map the equation to an endogenous variable.
+    A group of variables mapped to the block equations is created with the block name and the suffix "_endogenous".
+    Example:
+      $BLOCK myBlock
+        v1[t]$(tx0[t]).. v1[t] =E= v2;
+      $EndBlock  
+      $FIX All; $UNFIX myBlock_endogenous;
+      solve myBlock_model using CNS;
+
   $MODEL <model name> <equations and/or blocks/models>;
     $MODEL can use a mix of Models, Blocks, and Equations.
     Example:
-    $MODEL M_newModel
-      M_oldModel
-      B_myBlock
-      E_eq2
-    ;
+      $MODEL M_newModel
+        M_oldModel
+        B_myBlock
+        E_eq2
+      ;
+
   $LOOP <group name>: <content replacing {NAME}, {SETS}, {CONDITIONS}> $ENDLOOP
     Example:
-    $LOOP G_myGroup:
-      parameter saved_{name}{sets};
-      saved_{name}{sets} = {name}.L{sets};
-    $EndLoop
+      $LOOP G_myGroup:
+        parameter saved_{name}{sets};
+        saved_{name}{sets} = {name}.L{sets};
+      $EndLoop
+
   $LOOP <block name>: <content replacing {NAME}, {SETS}, {CONDITIONS}, {LHS}, or {RHS}> $ENDLOOP
     Example:
-    $LOOP B_myBlock:
-      {name}_ss{sets}$(tx0[t] and {conditions}) {LHS} =E= {RHS};
-    $EndLoop
+      $LOOP B_myBlock:
+        {name}_ss{sets}$(tx0[t] and {conditions}) {LHS} =E= {RHS};
+      $EndLoop
+
   $FIX <variables or groups>;
     Exogenous variables.
     Equivalent to writing
     <variable>.fx[<variable>] = <variable>.l[<sets>];
     for each variable.
+
   $UNFIX[(<lower bound>, <upper bound>)] <variables or groups>;
     Endogenize variables.
     Equivalent to writing
@@ -66,35 +81,38 @@ Available commands:
     <variable>.up[<variable>] = <upper bound>;
     for each variable.
     If no bounds are given, lower and upper bounds are set to -inf and inf respectively.
+
   $DISPLAY <variables or groups>;
+
   $IMPORT <filename>
     Include a separate file in this file. Note that the regular GAMS $INCLUDE still exists (and is faster). Use @IMPORT if imported file should be processed with gamY.
+
   $IF <condition expression>: <content> $ENDIF
     If statement where the condition is evaluated in python.
+
   $FOR <python expression>: <content> $ENDFOR
     $For {parameter}, {value} in [("a", 1), ("b",2)]:
       {parameter} = {value};
     $EndFor
+
   $FUNCTION <function name>([<argument name>, <...>]) $ENDFUNCTION
     Define a new gamY function.
   @<function name>([<argument value>, <...>])
     Call a previously defined function.
+
   $REPLACE $ENDREPLACE
     Find and replace.
+
   $REGEX $ENDREGEX
     Find and replace with regular expressions (wild card search).
+    
 Save/Read options
   As in regular GAMS, runs can be saved and read using the options s=<filename> and r=<filename>
   Group definitions etc. are saved in and read from a pkl file along side the GAMS g00 file.
-  $FIX ALL;
-  $UNFIX G_myGroup$(subset1[t])
-  $FIX var1;
-  $If %my_var% == conditional:
-    #  then do stuff here
-  $EndIf
+
 Implementation notes
   The preprocessor uses 'brute force' regular expressions to find and replace the new macro commands.
-  It is highly recommended to use an AI to understand or modify any regular expression patterns.
+  It is recommended to use an AI to understand or modify any regular expression patterns.
   Commands are processed in the order they appear and can be nested (using recursive descent parsing).
   A tokenizer is not used and is unlikely to simplify the code as syntax varies for each command,
   and only the commands, rather than all the GAMS code, need to be parsed.
@@ -123,7 +141,9 @@ from .patterns import PATTERNS, open_bracket, close_bracket, brackets, no_bracke
 leave_env_variables_for_gams = False
 automatic_additive_residuals_prefix = None
 automatic_multiplicative_residuals_prefix = None
-error_on_missing_label = False
+error_on_missing_label = True
+block_equations_suffix = ""
+require_variable_with_equation = False
 
 def get_lst_path(file_path):
   """Return the path to the LST file corresponding to the GAMS file"""
@@ -202,7 +222,7 @@ class Precompiler:
       ("display_all", self.display_all),
       ("fix", self.fix_unfix),
     ]
-    self.top_down_commands = [  # Rememeber also to add these to the top down pattern in patterns.py
+    self.top_down_commands = [  # Remeber also to add these to the top down pattern in patterns.py
       ("define_function", self.define_function),
       ("env_variable", self.insert_env_variable),
       ("if", self.if_statements),
@@ -475,11 +495,11 @@ class Precompiler:
     """
     Parse $REPLACE command
     Example:
-    $REPLACE('t', 'tt'):
-      t_in_name[t]
-    $ENDREPLACE
-    ->
-    tt_in_name(tt)
+      $REPLACE('t', 'tt'):
+        t_in_name[t]
+      $ENDREPLACE
+      ->
+      tt_in_name(tt)
     """
     old, new, count, expression = match.groups()
     if count:
@@ -494,11 +514,11 @@ class Precompiler:
     Second argument must be a string enclosed in '' or ""
     Third arguments is an optional integer
     Example:
-    $REGEX('\bt\b', 'tt'):
-      t_in_name[t]
-    $ENDREGEX
-    ->
-    t_in_name(tt)
+      $REGEX('\bt\b', 'tt'):
+        t_in_name[t]
+      $ENDREGEX
+      ->
+      t_in_name(tt)
     """
 
     id_, old, new, count, expression = match.groups()
@@ -526,6 +546,14 @@ class Precompiler:
     else:
       return pattern.sub(new[1:-1], expression)
 
+  def generate_equation_name(self, var, sets, conditions):
+    """Generate unique equation name based on the name, sets, and conditions of the associated endogenous variable."""
+    suffix = self.sets_to_conditions(sets, var, conditions)
+    # Remove sets denoted with square brackets, special characters, and whitespace
+    suffix = re.sub(r"\[.+?\]", "", suffix)
+    suffix = re.sub(r"[\$\(\)]", "", suffix)
+    suffix = re.sub(" ", "_", suffix)
+    return f"{var.name}_{suffix}"
 
   def block_define(self, match, text):
     """
@@ -565,8 +593,18 @@ class Precompiler:
       "\n# " + "-"*100 + "\n"
     )
     self.blocks[block_name] = Block()
-    for e_match in equation_pattern.finditer(content):
-      eq = Equation(*[v if v is not None else "" for v in e_match.groups()])
+    replacement_text += f"\n$GROUP {block_name}_endogenous ;\n"
+    for equation_match in equation_pattern.finditer(content):
+      eq_name, sets, conditions, LHS, RHS = (
+        group if group is not None else "" for group in equation_match.groups()
+      )
+      if require_variable_with_equation and eq_name not in self.groups["all"]:
+        self.error(f"{eq_name} is not defined as a variable. Please define it using $GROUP.")
+      if eq_name in self.groups["all"]:
+        replacement_text += f"$GROUP {block_name}_endogenous {block_name}_endogenous, {eq_name}{sets}{conditions};"
+        eq_name = self.generate_equation_name(self.groups["all"][eq_name], sets, conditions)
+
+      eq = Equation(eq_name, sets, conditions, LHS, RHS)
       self.blocks[block_name][eq.name] = eq
       replacement_text += f"EQUATION {eq.name}{eq.sets};"
 
@@ -602,7 +640,7 @@ class Precompiler:
         RHS = f"(1+{self.mult_adjust}{eq._name}{eq.sets}) * ({RHS})"
       replacement_text += "\n"+f"{eq.name}{eq.sets}{eq.conditions}.. {eq.LHS} =E= {RHS};"+"\n"
 
-    replacement_text += f"$MODEL {block_name} {block_name};"
+    replacement_text += f"$MODEL {block_name}{block_equations_suffix} {block_name};"
     return replacement_text
 
   def model_define(self, match, text):
@@ -630,7 +668,7 @@ class Precompiler:
       "\n# " + "-" * 100 +
       "\n#  Define " + model_name + " model" +
       "\n# " + "-" * 100 +
-      "\nModel " + model_name + " /\n"
+      "\nModel " + model_name
     )
     new_model = Block()
     for item_match in item_pattern.finditer(content):
@@ -654,9 +692,11 @@ class Precompiler:
       else:
         raise KeyError(name, " is not a valid equation, block of equations, or model")
 
-    for eq in new_model.values():
-      replacement_text += eq.name + ", "
-    replacement_text = replacement_text[:-2] + "\n/;\n"
+    if new_model: # If the model is not empty
+      replacement_text += " / \n"
+      replacement_text += ", ".join([eq.name for eq in new_model.values()])
+      replacement_text += "\n /"
+    replacement_text += ";"
 
     #  Define an equation block, so that the model can be used in the same ways a regular blocks
     self.blocks[model_name] = new_model
