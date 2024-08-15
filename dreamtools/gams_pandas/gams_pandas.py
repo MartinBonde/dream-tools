@@ -35,7 +35,10 @@ class GamsPandasDatabase:
     self.series = {}
 
   def __getattr__(self, item):
-    return self[item]
+    try:
+      return self[item]
+    except KeyError as err:
+      raise AttributeError(*err.args) from err
 
   def copy(self):
     obj = type(self).__new__(self.__class__)
