@@ -525,11 +525,10 @@ class Precompiler:
 
     if not id_:
         id_ = " "
-    if f"$REGED{id_}" in expression:
+    if f"$REGEX{id_}" in expression:
       self.error(
         f"""
-        Nested REGED statements must be identified with id numbers (e.g. $REGED1 .. $ENDREGED1).
-        Condition: '{condition}'
+        Nested REGEX statements must be identified with id numbers (e.g. $REGEX1 .. $ENDREGEX1).
         Expression: '{expression}'
         """
       )
