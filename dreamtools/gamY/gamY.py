@@ -128,6 +128,7 @@ import re
 from math import ceil, floor
 from heapq import heappush
 from timeit import default_timer as timer
+from textwrap import dedent
 
 import itertools # Useful in FOR loops in MAKRO
 
@@ -228,6 +229,7 @@ class Precompiler:
       ("if", self.if_statements),
       ("for_loop", self.for_loop),
       ("loop", self.loop),
+      ("eval_python", self.eval_python),
     ]
     self.commands = self.recursive_commands + self.top_down_commands
     self.prev_match = None
@@ -550,8 +552,21 @@ class Precompiler:
     suffix = self.sets_to_conditions(sets, var, conditions)
     # Remove sets denoted with square brackets, special characters, and whitespace
     suffix = re.sub(r"\[.+?\]", "", suffix)
-    suffix = re.sub(r"[\$\(\)]", "", suffix)
-    suffix = re.sub(" ", "_", suffix)
+    
+    # Replace comparison operators with their corresponding abbreviations
+    suffix = re.sub(r">=", "GE", suffix)
+    suffix = re.sub(r"<=", "LE", suffix)
+    suffix = re.sub(r"<", "LT", suffix)
+    suffix = re.sub(r">", "GT", suffix)
+    suffix = re.sub(r"=", "EQ", suffix)
+    suffix = re.sub(r"<>", "NE", suffix)
+
+    # Replace whitespace with underscores
+    suffix = re.sub(r"\s+", "_", suffix)
+
+    # Remove other special characters
+    suffix = re.sub(r"[^A-Za-z0-9_]", "", suffix)
+
     return f"{var.name}_{suffix}"
 
   def block_define(self, match, text):
@@ -768,12 +783,16 @@ class Precompiler:
       DECLARE = "VARIABLE "
       L = ".L"
 
-    group_name = match.group(1)
-    content = self.remove_comments(match.group(2))
-    replacement_text = ("\n# " + "-"*ceil(50-len(group_name)/2) + group_name + "-"*floor(50-len(group_name)/2) +
-              "\n#  Initialize " + group_name + " group" +
-              "\n# " + "-" * 100 +
-              "\n$offlisting\n")
+    add_to_existing, group_name, content = match.groups()
+    content = self.remove_comments(content)
+    if add_to_existing:
+      content  = group_name + ", " + content
+    replacement_text = f"""
+# {'-' * ceil(50-len(group_name)/2)}{group_name}{'-' * floor(50-len(group_name)/2)}
+#  {"Add to" if add_to_existing else "Initialize"} {group_name} group
+# {'-' * 100}
+$offlisting
+"""
 
     new_group = Group()
     new_group_conditions = CaseInsensitiveDict()
@@ -1144,6 +1163,12 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
       replacement_text += sub
     return replacement_text
 
+  def eval_python(self, match, text):
+    """
+    Evaluate python code
+    """
+    code = dedent(match.group(1))
+    return eval(code)
 
   def display(self, match, text, ignore_conditionals=False):
     """
@@ -1156,7 +1181,7 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
 
     # We use the group command to define a temporary group.
     # This ensures that the display syntax is identical to the GROUP command.
-    self.group_define(MockMatch("temp_display_group", content), text)
+    self.group_define(MockMatch("", "temp_display_group", content), text)
 
     for var in self.groups["temp_display_group"].values():
       conditions = self.groups_conditions["temp_display_group"][var.name]
@@ -1230,7 +1255,7 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
 
     # We use the group command to define a temporary group.
     # This ensures that the syntax for FIX/UNFIX is identical to the GROUP command.
-    self.group_define(MockMatch("temp_fix_unfix_group", content), text)
+    self.group_define(MockMatch("", "temp_fix_unfix_group", content), text)
 
     for var in self.groups["temp_fix_unfix_group"].values():
       conditions = self.groups_conditions["temp_fix_unfix_group"][var.name]
@@ -1404,6 +1429,8 @@ def run(file_path, r=None, s=None, shell=False, **kwargs):
     sys.exit(process.returncode)
   elif process.returncode != 0:
     raise Exception(f"Error in GAMS execution. Return code: {process.returncode}")
+  
+  return precompiler
 
 
 status_message_patterns = [

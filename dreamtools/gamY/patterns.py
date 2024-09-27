@@ -31,7 +31,7 @@ PATTERN_STRINGS = {
     "eval": fr"""
 
                 \$eval(global|local|)
-                \s*
+                \s+
                 ({ident})
                 \s+
                 ([^\;]+)
@@ -45,9 +45,9 @@ PATTERN_STRINGS = {
 
     "block": fr"\$Block\s+({ident})\s+(.*?)\$EndBlock",
 
-    "group": fr"\$Group\s+({ident})\s+(.*?;)",  # 1) name, 2) content
+    "group": fr"\$Group(\+?)\s+({ident})\s+(.*?;)",  # 1) +? 2) name, 3) content
 
-    "pgroup": fr"\$PGroup\s+({ident})\s+(.*?;)",
+    "pgroup": fr"\$PGroup(\+?)\s+({ident})\s+(.*?;)",
 
     "display": r"""
         \$Display\s
@@ -135,6 +135,12 @@ PATTERN_STRINGS = {
                         (.*?)
                         \$EndRegex(?P=regex_id)\b
                     """,
+
+    "eval_python": fr"""
+        \$EvalPython
+        (.*?) # Code
+        \$EndEvalPython
+    """
 }
 
 # Compile regex patterns
