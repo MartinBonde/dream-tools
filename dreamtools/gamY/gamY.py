@@ -28,20 +28,20 @@ Available commands:
         var3[a,t], -var3$(a.val < 18)  # Equivalent to var2
       ;
 
-  $BLOCK <block name> <equations> $ENDBLOCK
+  $BLOCK <block name> [$condition] <equations> $ENDBLOCK
     A block is a data structure containing equations.
     New equations should always be defined using the $BLOCK command rather than a GAMS EQUATIONS statement.
     The block command bundles together equations so that they can be manipulated together more easily, using other gamY commands such as $LOOP or $MODEL.
     Example:
-      $BLOCK B_myBlock
+      $BLOCK B_myBlock [$conditon]
         E_eq1[t].. v1[t] =E= v2;
       $EndBlock
 
     Instead of manually providing a unique equation identifier, the user may instead explicitly map the equation to an endogenous variable.
     A group of variables mapped to the block equations is created with the block name and the suffix "_endogenous".
     Example:
-      $BLOCK myBlock
-        v1[t]$(tx0[t]).. v1[t] =E= v2;
+      $BLOCK myBlock $(t.val > t1.val)
+        v1[t]$(tEnd[t]).. v1[t] =E= v2;
       $EndBlock  
       $FIX All; $UNFIX myBlock_endogenous;
       solve myBlock_model using CNS;
@@ -601,7 +601,8 @@ class Precompiler:
     """, re.VERBOSE | re.MULTILINE | re.DOTALL | re.IGNORECASE)
 
     block_name = match.group(1)
-    content = self.remove_comments(match.group(2))
+    block_conditions = match.group(2)
+    content = self.remove_comments(match.group(3))
     replacement_text = (
       "\n# " + "-"*ceil(50-len(block_name)/2) + block_name + "-"*floor(50-len(block_name)/2) +
       "\n#  Initialize " + block_name + " equation block" +
@@ -618,6 +619,11 @@ class Precompiler:
       if eq_name in self.groups["all"]:
         replacement_text += f"$GROUP {block_name}_endogenous {block_name}_endogenous, {eq_name}{sets}{conditions};"
         eq_name = self.generate_equation_name(self.groups["all"][eq_name], sets, conditions)
+
+      if block_conditions and conditions:
+        conditions = f"$({block_conditions[1:]} and {conditions[1:]})"
+      elif block_conditions:
+        conditions = block_conditions
 
       eq = Equation(eq_name, sets, conditions, LHS, RHS)
       self.blocks[block_name][eq.name] = eq

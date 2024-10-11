@@ -6,6 +6,7 @@ close_bracket = r"[\)\]]"
 brackets = r"[\(\)\[\]]"
 no_brackets = r"[^\(\)\[\]]"
 ident = r"[A-Za-z0-9_]{1,62}" # A valid symbol in GAMS is a letter followed by up to 62 letters, numbers or underscores. gamY also accepts starting with a number or underscore.
+linebreak = r"(?:\r\n|\r|\n)"
 
 # Top level patterns for all commands. Used to recursively parse script.
 PATTERN_STRINGS = {
@@ -43,7 +44,7 @@ PATTERN_STRINGS = {
         ([^\s;]+)                # File name
     """,
 
-    "block": fr"\$Block\s+({ident})\s+(.*?)\$EndBlock",
+    "block": fr"\$Block\s+({ident})\s*(\$.+?)?\s*{linebreak}(.*?)\$EndBlock",
 
     "group": fr"\$Group(\+?)\s+({ident})\s+(.*?;)",  # 1) +? 2) name, 3) content
 
