@@ -1280,7 +1280,8 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
         replacement_text += "{var.name}.lo{var.sets}{conditions} = {lower_bound};\n".format(**locals())
         replacement_text += "{var.name}.up{var.sets}{conditions} = {upper_bound};\n".format(**locals())
 
-    replacement_text += "$onlisting\n"
+    replacement_text = self.end_off_listing(replacement_text)
+
     return replacement_text
 
 
@@ -1434,10 +1435,11 @@ def run(file_path, r=None, s=None, shell=False, **kwargs):
   process.terminate() # terminate process
   process.wait()
   
+  if process.returncode != 0:
+    raise Exception(f"Error in GAMS execution. Return code: {process.returncode}")
+
   if shell:
     sys.exit(process.returncode)
-  elif process.returncode != 0:
-    raise Exception(f"Error in GAMS execution. Return code: {process.returncode}")
   
   return precompiler
 
