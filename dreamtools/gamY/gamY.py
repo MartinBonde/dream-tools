@@ -145,6 +145,7 @@ automatic_multiplicative_residuals_prefix = None
 error_on_missing_label = True
 block_equations_suffix = ""
 require_variable_with_equation = False
+defualt_initial_level = 0
 
 def get_lst_path(file_path):
   """Return the path to the LST file corresponding to the GAMS file"""
@@ -746,7 +747,7 @@ class Precompiler:
         item_conditions = self.combine_conditions(item_conditions, f"{con_set}[{def_set}]")
     return item_conditions
 
-  def group_define(self, match, text, init_val="0", parameter_group=False):
+  def group_define(self, match, text, parameter_group=False):
     """
     Parse $GROUP command
     Syntax example:
@@ -860,8 +861,8 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
       else:
         replacement_text += DECLARE + var.name + var.sets + " \"" + var.label[1:-1] + "\";\n"
         new_group[var.name] = var
-        if not level:
-          level = init_val
+        if not level and defualt_initial_level is not None:
+          level = str(defualt_initial_level)
 
       # Set levels if a value is given
       if level:
@@ -870,14 +871,22 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
         else:
           replacement_text += var.name + L + var.sets + " = " + level + ";\n"
 
-    replacement_text += "$onlisting\n"
-
+    replacement_text = self.end_off_listing(replacement_text)
+    
     GROUPS[group_name] = new_group
     GROUPS["all"] = Group(new_group, **GROUPS["all"])
     CONDITIONS[group_name] = new_group_conditions
     CONDITIONS["all"] = {k: None for k in GROUPS["all"]}
 
     return replacement_text
+
+  @staticmethod
+  def end_off_listing(text):
+    """Set $onlisting or remove unnecessary $offlisting"""
+    if text.endswith("$offlisting\n"):
+      return text[:-12]
+    else:
+      return text + "$onlisting\n"
 
   def pgroup_define(self, match, text):
     return self.group_define(match, text, parameter_group=True)
