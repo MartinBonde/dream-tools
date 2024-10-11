@@ -145,7 +145,7 @@ automatic_multiplicative_residuals_prefix = None
 error_on_missing_label = True
 block_equations_suffix = ""
 require_variable_with_equation = False
-defualt_initial_level = 0
+default_initial_level = 0
 
 def get_lst_path(file_path):
   """Return the path to the LST file corresponding to the GAMS file"""
@@ -867,15 +867,13 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
       else:
         replacement_text += DECLARE + var.name + var.sets + " \"" + var.label[1:-1] + "\";\n"
         new_group[var.name] = var
-        if not level and defualt_initial_level is not None:
-          level = str(defualt_initial_level)
+        if not level and default_initial_level is not None:
+          level = str(default_initial_level)
 
       # Set levels if a value is given
       if level:
-        if new_group_conditions[var.name]:
-          replacement_text += var.name + L + var.sets + "$" + new_group_conditions[var.name] + " = " + level + ";\n"
-        else:
-          replacement_text += var.name + L + var.sets + " = " + level + ";\n"
+        conditions = "$" + new_group_conditions[var.name] if new_group_conditions[var.name] else ""
+        replacement_text += var.name + L + var.sets + conditions + " = " + level + ";\n"
 
     replacement_text = self.end_off_listing(replacement_text)
     
