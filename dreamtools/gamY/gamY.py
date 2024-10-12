@@ -145,7 +145,9 @@ automatic_multiplicative_residuals_prefix = None
 error_on_missing_label = True
 block_equations_suffix = ""
 require_variable_with_equation = False
+variable_equation_prefix = "E_"
 default_initial_level = 0
+automatic_dummy_suffix = None
 
 def get_lst_path(file_path):
   """Return the path to the LST file corresponding to the GAMS file"""
@@ -568,7 +570,14 @@ class Precompiler:
     # Remove other special characters
     suffix = re.sub(r"[^A-Za-z0-9_]", "", suffix)
 
-    return f"{var.name}_{suffix}"
+    return f"{variable_equation_prefix}{var.name}_{suffix}"
+
+  @staticmethod
+  def merge_conditions(*args):
+    args = [arg.strip("$") for arg in args if arg]
+    if args:
+      return f"$({' and '.join(args)})"
+    return ""
 
   def block_define(self, match, text):
     """
@@ -614,18 +623,21 @@ class Precompiler:
       eq_name, sets, conditions, LHS, RHS = (
         group if group is not None else "" for group in equation_match.groups()
       )
-      if require_variable_with_equation and eq_name not in self.groups["all"]:
+
+      var_name = eq_name if eq_name in self.groups["all"] else None
+
+      if require_variable_with_equation and var_name is None:
         self.error(f"{eq_name} is not defined as a variable. Please define it using $GROUP.")
-      if eq_name in self.groups["all"]:
-        replacement_text += f"$GROUP {block_name}_endogenous {block_name}_endogenous, {eq_name}{sets}{conditions};"
-        eq_name = self.generate_equation_name(self.groups["all"][eq_name], sets, conditions)
 
-      if block_conditions and conditions:
-        conditions = f"$({block_conditions[1:]} and {conditions[1:]})"
-      elif block_conditions:
-        conditions = block_conditions
+      merged_conditions = self.merge_conditions(block_conditions, conditions)
 
-      eq = Equation(eq_name, sets, conditions, LHS, RHS)
+      if var_name is not None:
+        eq_name = self.generate_equation_name(self.groups["all"][var_name], sets, conditions)
+        if automatic_dummy_suffix:
+          merged_conditions = self.merge_conditions(merged_conditions, f"{var_name}{automatic_dummy_suffix}{sets}")
+        replacement_text += f"$GROUP {block_name}_endogenous {block_name}_endogenous, {var_name}{sets}{merged_conditions};"
+
+      eq = Equation(eq_name, sets, merged_conditions, LHS, RHS)
       self.blocks[block_name][eq.name] = eq
       replacement_text += f"EQUATION {eq.name}{eq.sets};"
 
@@ -782,12 +794,12 @@ class Precompiler:
     if parameter_group:
       GROUPS = self.pgroups
       CONDITIONS = self.pgroups_conditions
-      DECLARE = "PARAMETER "
+      DECLARE = "PARAMETER"
       L = ""
     else:
       GROUPS = self.groups
       CONDITIONS = self.groups_conditions
-      DECLARE = "VARIABLE "
+      DECLARE = "VARIABLE"
       L = ".L"
 
     add_to_existing, group_name, content = match.groups()
@@ -865,15 +877,17 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
       if var.name in GROUPS["all"]:
         new_group[var.name] = GROUPS["all"][var.name]
       else:
-        replacement_text += DECLARE + var.name + var.sets + " \"" + var.label[1:-1] + "\";\n"
+        replacement_text += f"{DECLARE} {var.name}{var.sets} {var.label};\n"
+        if automatic_dummy_suffix:
+          replacement_text += f"SET {var.name}{automatic_dummy_suffix}{var.sets};\n"
         new_group[var.name] = var
         if not level and default_initial_level is not None:
           level = str(default_initial_level)
 
       # Set levels if a value is given
       if level:
-        conditions = "$" + new_group_conditions[var.name] if new_group_conditions[var.name] else ""
-        replacement_text += var.name + L + var.sets + conditions + " = " + level + ";\n"
+        conditions = self.merge_conditions(new_group_conditions[var.name])
+        replacement_text += f"{var.name}{L}{var.sets}{conditions} = {level};\n"
 
     replacement_text = self.end_off_listing(replacement_text)
     
@@ -1271,9 +1285,7 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
     self.group_define(MockMatch("", "temp_fix_unfix_group", content), text)
 
     for var in self.groups["temp_fix_unfix_group"].values():
-      conditions = self.groups_conditions["temp_fix_unfix_group"][var.name]
-      if conditions:
-        conditions = "$"+conditions
+      conditions = self.merge_conditions(self.groups_conditions["temp_fix_unfix_group"][var.name])
 
       if (command == "$fix"):
         if level_value:
