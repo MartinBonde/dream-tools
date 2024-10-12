@@ -266,7 +266,13 @@ class Precompiler:
     text = self.processed_text + text
     text = self.dedent_dollar(text)
     text = self.restore_temporary_substitutions(text)
+    text = self.remove_unnecessary_on_off_listing(text)
     return text
+  
+  @staticmethod
+  def remove_unnecessary_on_off_listing(text):
+    pattern = re.compile(r"\$offlisting\s*\$onlisting\s?", re.MULTILINE | re.IGNORECASE)
+    return pattern.sub("", text)
 
   def parse(self, text, top_level=False):
     while True:
@@ -453,11 +459,7 @@ class Precompiler:
     condition = re.sub(r"(?<![a-zA-Z])GE(?![a-zA-Z])", ">=", condition, flags=re.IGNORECASE)
 
     condition_trunc = condition.split("\n")[0]
-    replacement_text = (
-      "\n# " + "-" * 100 +
-      "\n#  IF " + condition_trunc + ":"
-      "\n# " + "-" * 100 + "\n"
-    )
+    replacement_text = f"\n# ----- gamY: IF {condition_trunc}: -----\n"
 
     try:
       if eval(condition.lower()):
@@ -467,11 +469,7 @@ class Precompiler:
     except Exception as e:
       self.error(f"""Failed to evaluate IF-condition: {condition}
 {e}""")
-    replacement_text += (
-      "\n# " + "-"*100 +
-      "\n#  ENDIF" +
-      "\n# " + "-" * 100 + "\n"
-    )
+    replacement_text += f"\n# ----- gamY: ENDIF -----\n"
 
     return replacement_text
 
@@ -480,11 +478,7 @@ class Precompiler:
     Return text with $Import commands replaced by code in Import file
     """
     file_name = os.path.join(self.file_dir, match.group(1))
-    replacement_text = (
-      "\n# " + "-"*100 +
-      "\n#  Import file: " + file_name +
-      "\n# " + "-" * 100 + "\n"
-    )
+    replacement_text = f"\n# ----- gamY: Import file: {file_name} ----- \n"
     if os.path.isfile(file_name):
       try:
         with open(file_name, "r") as f:
@@ -553,6 +547,9 @@ class Precompiler:
   def generate_equation_name(self, var, sets, conditions):
     """Generate unique equation name based on the name, sets, and conditions of the associated endogenous variable."""
     suffix = self.sets_to_conditions(sets, var, conditions)
+    if not suffix:
+      return f"{variable_equation_prefix}{var.name}"
+
     # Remove sets denoted with square brackets, special characters, and whitespace
     suffix = re.sub(r"\[.+?\]", "", suffix)
     
@@ -612,11 +609,7 @@ class Precompiler:
     block_name = match.group(1)
     block_conditions = match.group(2)
     content = self.remove_comments(match.group(3))
-    replacement_text = (
-      "\n# " + "-"*ceil(50-len(block_name)/2) + block_name + "-"*floor(50-len(block_name)/2) +
-      "\n#  Initialize " + block_name + " equation block" +
-      "\n# " + "-"*100 + "\n"
-    )
+    replacement_text = f"\n# ----- gamY: Initialize {block_name} equation block -----\n"
     self.blocks[block_name] = Block()
     replacement_text += f"\n$GROUP {block_name}_endogenous ;\n"
     for equation_match in equation_pattern.finditer(content):
@@ -635,7 +628,7 @@ class Precompiler:
         eq_name = self.generate_equation_name(self.groups["all"][var_name], sets, conditions)
         if automatic_dummy_suffix:
           merged_conditions = self.merge_conditions(merged_conditions, f"{var_name}{automatic_dummy_suffix}{sets}")
-        replacement_text += f"$GROUP {block_name}_endogenous {block_name}_endogenous, {var_name}{sets}{merged_conditions};"
+        replacement_text += f"$GROUP+ {block_name}_endogenous {var_name}{sets}{merged_conditions};"
 
       eq = Equation(eq_name, sets, merged_conditions, LHS, RHS)
       self.blocks[block_name][eq.name] = eq
@@ -697,12 +690,8 @@ class Precompiler:
     equations = CaseInsensitiveDict({eq.name: eq for block in self.blocks.values() for eq in block.values()})
     model_name = match.group(1)
     content = self.remove_comments(match.group(2))
-    replacement_text = (
-      "\n# " + "-" * 100 +
-      "\n#  Define " + model_name + " model" +
-      "\n# " + "-" * 100 +
-      "\nModel " + model_name
-    )
+    replacement_text = f"\n# ----- gamY: Initialize {model_name} model -----\n"
+    replacement_text += f"MODEL {model_name}"
     new_model = Block()
     for item_match in item_pattern.finditer(content):
       remove = item_match.group(1)
@@ -806,12 +795,9 @@ class Precompiler:
     content = self.remove_comments(content)
     if add_to_existing:
       content  = group_name + ", " + content
-    replacement_text = f"""
-# {'-' * ceil(50-len(group_name)/2)}{group_name}{'-' * floor(50-len(group_name)/2)}
-#  {"Add to" if add_to_existing else "Initialize"} {group_name} group
-# {'-' * 100}
-$offlisting
-"""
+      replacement_text = "$offlisting\n"
+    else:
+      replacement_text = f"# ----- gamY: Initialize {group_name} group -----\n$offlisting\n"
 
     new_group = Group()
     new_group_conditions = CaseInsensitiveDict()
@@ -889,7 +875,7 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
         conditions = self.merge_conditions(new_group_conditions[var.name])
         replacement_text += f"{var.name}{L}{var.sets}{conditions} = {level};\n"
 
-    replacement_text = self.end_off_listing(replacement_text)
+    replacement_text += "$onlisting\n"
     
     GROUPS[group_name] = new_group
     GROUPS["all"] = Group(new_group, **GROUPS["all"])
@@ -897,14 +883,6 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
     CONDITIONS["all"] = {k: None for k in GROUPS["all"]}
 
     return replacement_text
-
-  @staticmethod
-  def end_off_listing(text):
-    """Set $onlisting or remove unnecessary $offlisting"""
-    if text.endswith("$offlisting\n"):
-      return text[:-12]
-    else:
-      return text + "$onlisting\n"
 
   def pgroup_define(self, match, text):
     return self.group_define(match, text, parameter_group=True)
@@ -927,12 +905,7 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
     if f"$FUNCTION{id_}" in expression:
       self.error(f"Nested FUNCTION definitions must be identified with id numbers (e.g. $FUNCTION1 .. $ENDFUNCTION1): {match.groups()[:-1]}")
     self.user_functions[name] = Function(name, args, expression)
-    replacement_text = (
-      "\n# " + "-"*100 +
-      "\n#  Define function: " + name  +
-      "\n# " + "-"*100 + "\n"
-    )
-    return replacement_text
+    return f"\n# ----- gamY: Define function: {name} -----"
 
   def for_loop(self, match, text):
     """
@@ -1010,9 +983,7 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
     if f"$LOOP{id_}" in expression:
       self.error(f"Nested loops must be identified with id numbers (e.g. $LOOP1 .. $ENDLOOP1): {match.groups()[:-1]}")
 
-    replacement_text = ("\n# " + "-"*100 +
-              "\n#  Loop over " + iterable_name +
-              "\n# " + "-" * 100 + "\n")
+    replacement_text = f"\n# ----- gamY: Loop over {iterable_name} -----\n"
 
     if iterable_name in self.groups:
       replacement_text += self.loop_over_variables(
@@ -1239,7 +1210,6 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
   def display_all(self, match, text):
     return self.display(match, text, ignore_conditionals=True)
 
-
   def solve(self, match, text):
     """
     """
@@ -1249,7 +1219,6 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
     replacement_text = self.model_define(MockMatch(model_name, content), text)
     replacement_text += "Solve {} using CNS;".format(model_name)
     return replacement_text
-
 
   #  $FIX $UNFIX
   def fix_unfix(self, match, text, lower_bound="-inf", upper_bound="inf", level_value=None):
@@ -1273,12 +1242,7 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
     if command == "$unfix" and bounds:
       lower_bound, upper_bound = bounds.split(",")
 
-    replacement_text = (
-      "\n# " + "-"*100 +
-      self.comment_out(match.group(0)) +
-      "\n# " + "-" * 100 +
-      "\n$offlisting\n"
-    )
+    replacement_text = f"\n# ----- gamY: {self.comment_out(match.group(0))} -----\n$offlisting\n"
 
     # We use the group command to define a temporary group.
     # This ensures that the syntax for FIX/UNFIX is identical to the GROUP command.
@@ -1296,7 +1260,7 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
         replacement_text += "{var.name}.lo{var.sets}{conditions} = {lower_bound};\n".format(**locals())
         replacement_text += "{var.name}.up{var.sets}{conditions} = {upper_bound};\n".format(**locals())
 
-    replacement_text = self.end_off_listing(replacement_text)
+    replacement_text += "$onlisting\n"
 
     return replacement_text
 
