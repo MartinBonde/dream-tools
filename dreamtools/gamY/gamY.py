@@ -145,9 +145,9 @@ automatic_multiplicative_residuals_prefix = None
 error_on_missing_label = True
 block_equations_suffix = ""
 require_variable_with_equation = False
-variable_equation_prefix = "E_"
+variable_equation_prefix = ""
 default_initial_level = 0
-automatic_dummy_suffix = None
+automatic_dummy_suffix = None # If set, a dummy variable is created for each variable in a group with the suffix
 
 def get_lst_path(file_path):
   """Return the path to the LST file corresponding to the GAMS file"""
@@ -544,30 +544,35 @@ class Precompiler:
     else:
       return pattern.sub(new[1:-1], expression)
 
-  def generate_equation_name(self, var, sets, conditions):
-    """Generate unique equation name based on the name, sets, and conditions of the associated endogenous variable."""
-    suffix = self.sets_to_conditions(sets, var, conditions)
-    if not suffix:
-      return f"{variable_equation_prefix}{var.name}"
+  # def generate_equation_name(self, var, sets, conditions):
+  #   """Generate unique equation name based on the name, sets, and conditions of the associated endogenous variable."""
+  #   suffix = self.sets_to_conditions(sets, var, conditions)
+  #   if not suffix:
+  #     return f"{variable_equation_prefix}{var.name}"
 
-    # Remove sets denoted with square brackets, special characters, and whitespace
-    suffix = re.sub(r"\[.+?\]", "", suffix)
+  #   # Remove sets denoted with square brackets, special characters, and whitespace
+  #   suffix = re.sub(r"\[.+?\]", "", suffix)
     
-    # Replace comparison operators with their corresponding abbreviations
-    suffix = re.sub(r">=", "GE", suffix)
-    suffix = re.sub(r"<=", "LE", suffix)
-    suffix = re.sub(r"<", "LT", suffix)
-    suffix = re.sub(r">", "GT", suffix)
-    suffix = re.sub(r"=", "EQ", suffix)
-    suffix = re.sub(r"<>", "NE", suffix)
+  #   # Replace comparison operators with their corresponding abbreviations
+  #   suffix = re.sub(r">=", "GE", suffix)
+  #   suffix = re.sub(r"<=", "LE", suffix)
+  #   suffix = re.sub(r"<", "LT", suffix)
+  #   suffix = re.sub(r">", "GT", suffix)
+  #   suffix = re.sub(r"=", "EQ", suffix)
+  #   suffix = re.sub(r"<>", "NE", suffix)
 
-    # Replace whitespace with underscores
-    suffix = re.sub(r"\s+", "_", suffix)
+  #   # Replace whitespace with underscores
+  #   suffix = re.sub(r"\s+", "_", suffix)
 
-    # Remove other special characters
-    suffix = re.sub(r"[^A-Za-z0-9_]", "", suffix)
+  #   # Remove other special characters
+  #   suffix = re.sub(r"[^A-Za-z0-9_]", "", suffix)
 
-    return f"{variable_equation_prefix}{var.name}_{suffix}"
+  #   return f"{variable_equation_prefix}{var.name}_{suffix}"
+
+  def generate_equation_name(self, name, sets, suffix):
+      if not suffix:
+        suffix = sets[1:-1].replace(",", "_").replace(" ", "")
+      return variable_equation_prefix + name + suffix
 
   @staticmethod
   def merge_conditions(*args):
@@ -594,7 +599,7 @@ class Precompiler:
     equation_pattern = re.compile(fr"""
       (?:^|\,)             #  Check only beginning of line or after a comma.
       \s*                  #  Ignore whitespace
-      ({ident})         #  Name of equation
+      ({ident})?(\&{ident})?         #  Name of equation, Suffix
       
       ({open_bracket}[^$]+?{close_bracket})?        #  Sets
       \s*
@@ -606,6 +611,8 @@ class Precompiler:
       (.+?)\;              #  RHS
     """, re.VERBOSE | re.MULTILINE | re.DOTALL | re.IGNORECASE)
 
+    lhs_variable_pattern = re.compile(f"({ident})({open_bracket}[^$]+?{close_bracket})?", re.IGNORECASE | re.MULTILINE)
+
     block_name = match.group(1)
     block_conditions = match.group(2)
     content = self.remove_comments(match.group(3))
@@ -613,23 +620,27 @@ class Precompiler:
     self.blocks[block_name] = Block()
     replacement_text += f"\n$GROUP {block_name}_endogenous ;\n"
     for equation_match in equation_pattern.finditer(content):
-      eq_name, sets, conditions, LHS, RHS = (
+      name, suffix, sets, conditions, LHS, RHS = (
         group if group is not None else "" for group in equation_match.groups()
       )
 
-      var_name = eq_name if eq_name in self.groups["all"] else None
+      if not name:
+        name, var_sets = lhs_variable_pattern.search(LHS).groups()
+        if not sets:
+          sets = var_sets
 
-      if require_variable_with_equation and var_name is None:
-        self.error(f"{eq_name} is not defined as a variable. Please define it using $GROUP.")
+      if require_variable_with_equation and name not in self.groups["all"]:
+        self.error(f"Variable '{name}' must be defined in a group before being used in a block")
 
       merged_conditions = self.merge_conditions(block_conditions, conditions)
 
-      if var_name is not None:
-        eq_name = self.generate_equation_name(self.groups["all"][var_name], sets, conditions)
+      if name in self.groups["all"]:
         if automatic_dummy_suffix:
-          merged_conditions = self.merge_conditions(merged_conditions, f"{var_name}{automatic_dummy_suffix}{sets}")
-        replacement_text += f"$GROUP+ {block_name}_endogenous {var_name}{sets}{merged_conditions};"
+          merged_conditions = self.merge_conditions(merged_conditions, f"{name}{automatic_dummy_suffix}{sets}")
+        replacement_text += f"$GROUP+ {block_name}_endogenous {name}{sets}{merged_conditions};"
 
+      eq_name = self.generate_equation_name(name, sets, suffix[1:])
+      
       eq = Equation(eq_name, sets, merged_conditions, LHS, RHS)
       self.blocks[block_name][eq.name] = eq
       replacement_text += f"EQUATION {eq.name}{eq.sets};"
