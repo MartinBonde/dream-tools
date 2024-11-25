@@ -103,9 +103,6 @@ class Equation:
         self.LHS = LHS
         self.RHS = RHS
 
-        self._name = name[1:]  #  Name without E, usefull as slicing is not usable in python string format method
-
-
 class Function:
     """Data container for user defined functions"""
     def __init__(self, name, args, expression):

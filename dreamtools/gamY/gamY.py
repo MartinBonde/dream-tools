@@ -38,9 +38,9 @@ Available commands:
       $EndBlock
 
     Instead of manually providing a unique equation identifier, the user may instead explicitly map the equation to an endogenous variable.
-    A group of variables mapped to the block equations is created with the block name and the suffix "_endogenous".
+    A group of variables mapped to the block equations is created with the group name provided (e.g. myBlock_endogenous below).
     Example:
-      $BLOCK myBlock $(t.val > t1.val)
+      $BLOCK myBlock_equations myBlock_endogenous $(t.val > t1.val)
         v1[t]$(tEnd[t]).. v1[t] =E= v2;
       $EndBlock  
       $FIX All; $UNFIX myBlock_endogenous;
@@ -143,10 +143,7 @@ leave_env_variables_for_gams = False
 automatic_additive_residuals_prefix = None
 automatic_multiplicative_residuals_prefix = None
 error_on_missing_label = True
-block_equations_suffix = ""
-require_variable_with_equation = False
 variable_equation_prefix = ""
-default_initial_level = 0
 automatic_dummy_suffix = None # If set, a dummy variable is created for each variable in a group with the suffix
 
 def get_lst_path(file_path):
@@ -162,11 +159,13 @@ def get_lst_path(file_path):
 class Precompiler:
   """Object with methods to parse each gamY command"""
 
-  def __init__(self, file_path, patterns=PATTERNS, add_adjust=None, mult_adjust=None):
+  def __init__(self, file_path, patterns=PATTERNS, additive_adjust=None, multiplicative_adjust=None):
     self.groups = CaseInsensitiveDict({"all": {}})
     self.groups_conditions = CaseInsensitiveDict({"all": {}})
-    self.pgroups = CaseInsensitiveDict({"all": {}})
-    self.pgroups_conditions = CaseInsensitiveDict({"all": {}})
+    self.par_groups = CaseInsensitiveDict({"all": {}})
+    self.par_groups_conditions = CaseInsensitiveDict({"all": {}})
+    self.set_groups = CaseInsensitiveDict({"all": {}})
+    self.set_groups_conditions = CaseInsensitiveDict({"all": {}})
     self.blocks = CaseInsensitiveDict()
     self.globals = dict(os.environ)
     self.user_functions = CaseInsensitiveDict()
@@ -175,19 +174,19 @@ class Precompiler:
     self.has_read_file = False
 
     self.adjustment_terms = []
-    if add_adjust is not None:
-      self.add_adjust = add_adjust
+    if additive_adjust is not None:
+      self.additive_adjust = additive_adjust
     else:
-      self.add_adjust = automatic_additive_residuals_prefix
-    if mult_adjust is not None:
-      self.mult_adjust = mult_adjust
+      self.additive_adjust = automatic_additive_residuals_prefix
+    if multiplicative_adjust is not None:
+      self.multiplicative_adjust = multiplicative_adjust
     else:
-      self.mult_adjust = automatic_multiplicative_residuals_prefix
+      self.multiplicative_adjust = automatic_multiplicative_residuals_prefix
     
-    if add_adjust:
-      self.adjustment_terms.append(add_adjust)
-    if mult_adjust:
-      self.adjustment_terms.append(mult_adjust)
+    if additive_adjust:
+      self.adjustment_terms.append(additive_adjust)
+    if multiplicative_adjust:
+      self.adjustment_terms.append(multiplicative_adjust)
     for term in self.adjustment_terms:
       self.groups[term] = Group()
       self.groups_conditions[term] = {}
@@ -219,7 +218,8 @@ class Precompiler:
       ("solve", self.solve),
       ("model", self.model_define),
       ("group", self.group_define),
-      ("pgroup", self.pgroup_define),
+      ("par_group", self.par_group_define),
+      ("set_group", self.set_group_define),
       ("replace", self.sub),
       ("regex", self.regex),
       ("display", self.display),
@@ -313,7 +313,12 @@ class Precompiler:
     self.has_read_file = True
     try:
       with open(os.path.join(self.file_dir, file_name) + ".pkl", 'rb') as f:
-        self.blocks, self.groups, self.groups_conditions, self.pgroups, self.pgroups_conditions, loaded_globals, self.user_functions = pickle.load(f)
+        (self.blocks,
+         self.groups, self.groups_conditions,
+         self.par_groups, self.par_groups_conditions,
+         self.set_groups, self.set_groups_conditions,
+         loaded_globals, self.user_functions,
+        ) = pickle.load(f)
         print("Precompiler file read: " + file_name + ".pkl")
       self.globals.update(loaded_globals)
     except FileNotFoundError:
@@ -324,9 +329,15 @@ class Precompiler:
     Save dicts of blocks, groups, and variables in pickle file if s=<file_name> option is used
     """
     with open(os.path.join(self.file_dir, file_name) + ".pkl", 'wb') as f:
-      pickle.dump(
-        (self.blocks, self.groups, self.groups_conditions, self.pgroups, self.pgroups_conditions, self.globals, self.user_functions),
-        f, pickle.HIGHEST_PROTOCOL)
+      pickle.dump((
+          self.blocks, 
+          self.groups, self.groups_conditions,
+          self.par_groups, self.par_groups_conditions,
+          self.set_groups, self.set_groups_conditions,
+          self.globals, self.user_functions
+        ),
+        f, pickle.HIGHEST_PROTOCOL
+      )
 
   def comment_out(self, text):
     return_string = text.replace("\n", "\n#")
@@ -570,8 +581,12 @@ class Precompiler:
   #   return f"{variable_equation_prefix}{var.name}_{suffix}"
 
   def generate_equation_name(self, name, sets, suffix):
-      if not suffix:
-        suffix = sets[1:-1].replace(",", "_").replace(" ", "")
+      if sets and not suffix:
+        suffix = "_" + sets[1:-1].replace(",", "_").replace(" ", "")
+        if suffix.endswith("_t"):
+          suffix = suffix[:-2]
+        if name.endswith(suffix):
+          suffix = ""
       return variable_equation_prefix + name + suffix
 
   @staticmethod
@@ -580,6 +595,43 @@ class Precompiler:
     if args:
       return f"$({' and '.join(args)})"
     return ""
+
+  def check_if_variable_exists(self, name):
+    if name not in self.groups["all"]:
+      self.error(f"Variable '{name}' must be defined before being used in a block.")
+
+  def create_additive_adjustment_term(self, model_name, name, sets, RHS, replacement_text):
+    j_name = self.additive_adjust + name
+    j_group_name = f"{self.additive_adjust}_{model_name}"
+    docstring = f"Additive adjustment term for equation {name}"
+    replacement_text += f" VARIABLE {j_name}{sets} \"{docstring}\"; {j_name}.FX{sets} = 0;"
+    if j_group_name not in self.groups:
+      self.groups[j_group_name] = Group()
+      self.groups_conditions[j_group_name] = {}
+    j_var = Variable(j_name, sets, docstring)
+    self.groups[self.additive_adjust][j_name] = j_var
+    self.groups["all"][j_name] = j_var
+    self.groups[j_group_name][j_name] = j_var
+    if RHS.strip()[0] == "-":
+      RHS = f"{self.additive_adjust}{name}{sets} {RHS}"
+    else:
+      RHS = f"{self.additive_adjust}{name}{sets} + {RHS}"
+    return RHS, replacement_text
+
+  def create_multiplicative_adjustment_term(self, model_name, name, sets, RHS, replacement_text):
+    j_name = self.multiplicative_adjust + name
+    j_group_name = f"{self.multiplicative_adjust}_{model_name}"
+    docstring = f"Multiplicative adjustment term for equation {name}"
+    replacement_text += f"VARIABLE {j_name}{sets} \"{docstring}\"; {j_name}.FX{sets} = 0;"
+    if j_group_name not in self.groups:
+      self.groups[j_group_name] = Group()
+      self.groups_conditions[j_group_name] = {}
+    j_var = Variable(j_name, sets, docstring)
+    self.groups[self.multiplicative_adjust][j_name] = j_var
+    self.groups["all"][j_name] = j_var
+    self.groups[j_group_name][j_name] = j_var
+    RHS = f"(1+{self.multiplicative_adjust}{name}{sets}) * ({RHS})"
+    return RHS, replacement_text
 
   def block_define(self, match, text):
     """
@@ -613,13 +665,11 @@ class Precompiler:
 
     lhs_variable_pattern = re.compile(f"({ident})({open_bracket}[^$]+?{close_bracket})?", re.IGNORECASE | re.MULTILINE)
 
-    block_name = match.group(1)
-    block_conditions = match.group(2)
-    content = self.remove_comments(match.group(3))
-    replacement_text = f"\n# ----- gamY: Initialize {block_name} equation block -----\n"
-    self.blocks[block_name] = Block()
-    replacement_text += f"\n$GROUP {block_name}_endogenous ;\n"
-    for equation_match in equation_pattern.finditer(content):
+    model_name, group_name, block_conditions, content = match.groups()
+    replacement_text = f"\n# ----- gamY: Initialize {model_name} equation block -----\n"
+    self.blocks[model_name] = Block()
+    replacement_text += f"\n$GROUP {group_name} ;\n"
+    for equation_match in equation_pattern.finditer(self.remove_comments(content)):
       name, suffix, sets, conditions, LHS, RHS = (
         group if group is not None else "" for group in equation_match.groups()
       )
@@ -629,55 +679,30 @@ class Precompiler:
         if not sets:
           sets = var_sets
 
-      if require_variable_with_equation and name not in self.groups["all"]:
-        self.error(f"Variable '{name}' must be defined in a group before being used in a block")
+      if group_name:
+        self.check_if_variable_exists(name)
 
       merged_conditions = self.merge_conditions(block_conditions, conditions)
 
-      if name in self.groups["all"]:
-        if automatic_dummy_suffix:
-          merged_conditions = self.merge_conditions(merged_conditions, f"{name}{automatic_dummy_suffix}{sets}")
-        replacement_text += f"$GROUP+ {block_name}_endogenous {name}{sets}{merged_conditions};"
-
-      eq_name = self.generate_equation_name(name, sets, suffix[1:])
+      if name in self.groups["all"] and automatic_dummy_suffix:
+        merged_conditions = self.merge_conditions(merged_conditions, f"{name}{automatic_dummy_suffix}{sets}")
       
+      if group_name:
+        replacement_text += f"$GROUP+ {group_name} {name}{sets}{merged_conditions};"
+    
+      if self.additive_adjust:
+        RHS, replacement_text = self.create_additive_adjustment_term(model_name, name, sets, RHS, replacement_text)
+      if self.multiplicative_adjust:
+        RHS, replacement_text = self.create_multiplicative_adjustment_term(model_name, name, sets, RHS, replacement_text)
+
+      eq_name = self.generate_equation_name(name, sets, suffix[1:]) if group_name else name
+
       eq = Equation(eq_name, sets, merged_conditions, LHS, RHS)
-      self.blocks[block_name][eq.name] = eq
+      self.blocks[model_name][eq.name] = eq
       replacement_text += f"EQUATION {eq.name}{eq.sets};"
+      replacement_text += "\n"+f"{eq.name}{eq.sets}{eq.conditions}.. {eq.LHS} =E= {eq.RHS};"+"\n"
 
-      RHS = eq.RHS
-      if self.add_adjust:
-        j_name = self.add_adjust + eq._name
-        j_group_name = f"{self.add_adjust}_{block_name}"
-        docstring = f"Additive adjustment term for equation {eq.name}"
-        replacement_text += f" VARIABLE {j_name}{eq.sets} \"{docstring}\"; {j_name}.FX{eq.sets} = 0;"
-        if j_group_name not in self.groups:
-          self.groups[j_group_name] = Group()
-          self.groups_conditions[j_group_name] = {}
-        j_var = Variable(j_name, eq.sets, docstring)
-        self.groups[self.add_adjust][j_name] = j_var
-        self.groups["all"][j_name] = j_var
-        self.groups[j_group_name][j_name] = j_var
-        if RHS.strip()[0] == "-":
-          RHS = f"{self.add_adjust}{eq._name}{eq.sets} {RHS}"
-        else:
-          RHS = f"{self.add_adjust}{eq._name}{eq.sets} + {RHS}"
-      if self.mult_adjust:
-        j_name = self.mult_adjust + eq._name
-        j_group_name = f"{self.mult_adjust}_{block_name}"
-        docstring = f"Multiplicative adjustment term for equation {eq.name}"
-        replacement_text += f"VARIABLE {j_name}{eq.sets} \"{docstring}\"; {j_name}.FX{eq.sets} = 0;"
-        if j_group_name not in self.groups:
-          self.groups[j_group_name] = Group()
-          self.groups_conditions[j_group_name] = {}
-        j_var = Variable(j_name, eq.sets, docstring)
-        self.groups[self.mult_adjust][j_name] = j_var
-        self.groups["all"][j_name] = j_var
-        self.groups[j_group_name][j_name] = j_var
-        RHS = f"(1+{self.mult_adjust}{eq._name}{eq.sets}) * ({RHS})"
-      replacement_text += "\n"+f"{eq.name}{eq.sets}{eq.conditions}.. {eq.LHS} =E= {RHS};"+"\n"
-
-    replacement_text += f"$MODEL {block_name}{block_equations_suffix} {block_name};"
+    replacement_text += f"$MODEL {model_name} {model_name};"
     return replacement_text
 
   def model_define(self, match, text):
@@ -741,7 +766,7 @@ class Precompiler:
         self.groups[j_group_name] = {}
         self.groups_conditions[j_group_name] = {}
         for eq in new_model.values():
-          j_name = j+eq._name
+          j_name = j+eq.name
           self.groups[j_group_name][j_name] = self.groups[j][j_name]
 
     return replacement_text
@@ -765,7 +790,7 @@ class Precompiler:
         item_conditions = self.combine_conditions(item_conditions, f"{con_set}[{def_set}]")
     return item_conditions
 
-  def group_define(self, match, text, parameter_group=False):
+  def group_define(self, match, text, sym_type="Variable"):
     """
     Parse $GROUP command
     Syntax example:
@@ -791,16 +816,21 @@ class Precompiler:
       (?=[\n\,\;])          #  Variable separator (comma or new line)
     """, re.VERBOSE | re.MULTILINE | re.IGNORECASE)
 
-    if parameter_group:
-      GROUPS = self.pgroups
-      CONDITIONS = self.pgroups_conditions
-      DECLARE = "PARAMETER"
+    if sym_type == "Parameter":
+      GROUPS = self.par_groups
+      CONDITIONS = self.par_groups_conditions
       L = ""
+      DUMMY_SUFFIX = None
+    elif sym_type == "Set":
+      GROUPS = self.set_groups
+      CONDITIONS = self.set_groups_conditions
+      L = ""
+      DUMMY_SUFFIX = None
     else:
       GROUPS = self.groups
       CONDITIONS = self.groups_conditions
-      DECLARE = "VARIABLE"
       L = ".L"
+      DUMMY_SUFFIX = automatic_dummy_suffix
 
     add_to_existing, group_name, content = match.groups()
     content = self.remove_comments(content)
@@ -818,22 +848,22 @@ class Precompiler:
       remove, name, sets, item_conditions, label, level = item.group(1, 2, 3, 4, 5, 6)
 
       if name in GROUPS:
-        variables = GROUPS[name].values()
+        symbols = GROUPS[name].values()
         old_group_conditions = CONDITIONS[name]
       elif name in GROUPS["all"]:
-        variables = (GROUPS["all"][name],)
+        symbols = (GROUPS["all"][name],)
         old_group_conditions = {}
       elif remove:
         self.error(
-          f"{name} is not a variable or group, and could not be removed from {group_name} (this might be due to a typo).")
+          f"{name} is not a {sym_type} or group, and could not be removed from {group_name} (this might be due to a typo).")
       else:  # Initialize a new variable in a dummy group to loop over.
-        variables = (Variable(name, sets, label),)
+        symbols = (Variable(name, sets, label),) # Variable class is also used for sets and parameters
         old_group_conditions = {}
-        if not parameter_group and not label:
+        if not label:
           f = self.error if error_on_missing_label else self.warning
-          f(f"{name} was defined as a new variable without an explanatory text in group {group_name} (this might be due to a typo).")
+          f(f"{name} was defined without an explanatory text in {sym_type} group {group_name} (this might be due to a typo).\n{match.groups()}")
 
-      for var in variables:
+      for var in symbols:
         if sets and "$" in sets:
           self.error(
             f"""Conditionals in the GROUP statement must be surrounded by parentheses, e.g. $(d1[d]).
@@ -874,12 +904,10 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
       if var.name in GROUPS["all"]:
         new_group[var.name] = GROUPS["all"][var.name]
       else:
-        replacement_text += f"{DECLARE} {var.name}{var.sets} {var.label};\n"
-        if automatic_dummy_suffix:
-          replacement_text += f"SET {var.name}{automatic_dummy_suffix}{var.sets};\n"
+        replacement_text += f"{sym_type} {var.name}{var.sets} {var.label} //;\n"
+        if DUMMY_SUFFIX:
+          replacement_text += f"SET {var.name}{DUMMY_SUFFIX}{var.sets};\n"
         new_group[var.name] = var
-        if not level and default_initial_level is not None:
-          level = str(default_initial_level)
 
       # Set levels if a value is given
       if level:
@@ -895,8 +923,11 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
 
     return replacement_text
 
-  def pgroup_define(self, match, text):
-    return self.group_define(match, text, parameter_group=True)
+  def par_group_define(self, match, text):
+    return self.group_define(match, text, sym_type="Parameter")
+
+  def set_group_define(self, match, text):
+    return self.group_define(match, text, sym_type="Set")
 
   def define_function(self, match, text):
     """
@@ -1002,11 +1033,17 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
         self.groups[iterable_name].values(),
         group_conditions=self.groups_conditions[iterable_name]
       )
-    elif iterable_name in self.pgroups:
+    elif iterable_name in self.par_groups:
       replacement_text += self.loop_over_variables(
         expression,
-        self.pgroups[iterable_name].values(),
-        group_conditions=self.pgroups_conditions[iterable_name]
+        self.par_groups[iterable_name].values(),
+        group_conditions=self.par_groups_conditions[iterable_name]
+      )
+    elif iterable_name in self.set_groups:
+      replacement_text += self.loop_over_variables(
+        expression,
+        self.set_groups[iterable_name].values(),
+        group_conditions=self.set_groups_conditions[iterable_name]
       )
     elif iterable_name in self.blocks:
       replacement_text += self.loop_over_equations(expression, self.blocks[iterable_name].values())

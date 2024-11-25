@@ -23,7 +23,7 @@ PATTERN_STRINGS = {
     "set": fr"""
 
                 \$set(global|local|)
-                \s*
+                \s+
                 ({ident})
                 \s+
                 ([^\s\;]+)
@@ -44,11 +44,13 @@ PATTERN_STRINGS = {
         ([^\s;]+)                # File name
     """,
 
-    "block": fr"\$Block\s+({ident})\s*(\$.+?)?\s*{linebreak}(.*?)\$EndBlock",
+    "block": fr"\$Block\s+({ident})\s*({ident})?\s*(\$.+?)?\s*{linebreak}(.*?)\$EndBlock",
 
     "group": fr"\$Group(\+?)\s+({ident})\s+(.*?;)",  # 1) +? 2) name, 3) content
 
-    "pgroup": fr"\$PGroup(\+?)\s+({ident})\s+(.*?;)",
+    "par_group": fr"\$P(?:ar)?Group(\+?)\s+({ident})\s+(.*?;)",  # 1) +? 2) name, 3) content
+
+    "set_group": fr"\$S(?:et)?Group(\+?)\s+({ident})\s+(.*?;)",  # 1) +? 2) name, 3) content
 
     "display": r"""
         \$Display\s
