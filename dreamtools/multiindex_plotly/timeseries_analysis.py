@@ -2,6 +2,9 @@ import dreamtools as dt
 import numpy as np
 import pandas as pd
 from inspect import signature
+from warnings import simplefilter
+
+simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
 def get_reference_database(s=None):
   """Get baseline database associated with a GamsPandasDatabase. Defaults to dt.REFERENCE_DATABASE."""
@@ -307,7 +310,7 @@ def merge_multiseries(series, keep_axis_indices=None):
       while new_name in output:
         iter += 1
         new_name = f"{c}{iter}"
-      output[new_name] = df[c] 
+      output[new_name] = df[c]
 
   return output
 
