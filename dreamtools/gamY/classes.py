@@ -1,7 +1,7 @@
 from collections.abc import MutableMapping, Mapping
+import re
 
 class CaseInsensitiveDict(MutableMapping):
-
     """A case-insensitive ``dict``-like object.
     Implements all methods and operations of
     ``collections.MutableMapping`` as well as dict's ``copy``. Also
@@ -103,9 +103,6 @@ class Equation:
         self.LHS = LHS
         self.RHS = RHS
 
-        self._name = name[1:]  #  Name without E, usefull as slicing is not usable in python string format method
-
-
 class Function:
     """Data container for user defined functions"""
     def __init__(self, name, args, expression):
@@ -114,14 +111,6 @@ class Function:
         self.expression = expression
 
 
-class MockMatch:
-    def __init__(self, *groups):
-        self.groups = [*groups]
-        self.groups = ["".join(self.groups)] + self.groups
-
-    def group(self, i):
-        return self.groups[i]
-
-    def groups(self, i):
-        return self.groups
-
+def MockMatch(*groups):
+    """Mock re.Match object"""
+    return re.match("".join(f"({re.escape(group)})" for group in groups), "".join(groups))

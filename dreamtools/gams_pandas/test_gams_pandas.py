@@ -1,6 +1,6 @@
 import os
 import sys
-# os.chdir("../..")
+# os.chdir("..")
 sys.path.insert(0, os.getcwd())
 
 import pytest
@@ -14,7 +14,7 @@ def approximately_equal(x, y, ndigits=6):
   return round(x, ndigits) == round(y, ndigits)
 
 def test_gdx_read():
-  db = dt.Gdx("test.gdx")
+  db = dt.Gdx("../test.gdx")
   assert approximately_equal(db["qY"]["byg", 2025], 257.55, ndigits=2)
   assert approximately_equal(db["qI_s"]["IB", "fre", 2025], 7.41, ndigits=2)
   assert approximately_equal(db["eHh"], 1.25)
@@ -115,9 +115,9 @@ def test_create_variable():
                      ], columns=["t", "s", "value"]),
                      add_missing_domains=True
                      )
-  db.export("test_export.gdx")
-  assert dt.Gdx("test_export.gdx")["scalar"] == 3.2
-  assert all(dt.Gdx("test_export.gdx")["vector"] == [1, 2])
+  db.export("../test_export.gdx")
+  assert dt.Gdx("../test_export.gdx")["scalar"] == 3.2
+  assert all(dt.Gdx("../test_export.gdx")["vector"] == [1, 2])
   assert all(db.s == ["ser", "goo"])
   assert all(db.t == [2025, 2035])
 
@@ -137,9 +137,9 @@ def test_create_parameter():
                      ], columns=["t", "s", "value"]),
                      add_missing_domains=True
                      )
-  db.export("test_export.gdx")
-  assert dt.Gdx("test_export.gdx")["scalar"] == 3.2
-  assert all(dt.Gdx("test_export.gdx")["vector"] == [1, 2])
+  db.export("../test_export.gdx")
+  assert dt.Gdx("../test_export.gdx")["scalar"] == 3.2
+  assert all(dt.Gdx("../test_export.gdx")["vector"] == [1, 2])
   assert all(db.s == ["ser", "goo"])
   assert all(db.t == [2025, 2035])
 
@@ -164,45 +164,45 @@ def test_add_variable_from_dataframe():
   assert all(db.s == ["ser", "goo"])
 
 def test_multiply_with_different_sets():
-  db = dt.Gdx("test.gdx")
+  db = dt.Gdx("../test.gdx")
   i, s = db["i"], db["s"]
   result = (db["pI"] * db["qI_s"].loc[i, s]).groupby("t").sum() / db["vI"]["iTot"] # Using pI_s would give exact 1
   assert all(approximately_equal(result.loc[2030:], 1, ndigits=1))
 
 def test_export_with_no_changes():
-  dt.Gdx("test.gdx").export("test_export.gdx", relative_path=True)
-  assert round(os.stat("test.gdx").st_size, -5) == round(os.stat("test_export.gdx").st_size, -5)
+  dt.Gdx("../test.gdx").export("test_export.gdx", relative_path=True)
+  assert round(os.stat("../test.gdx").st_size, -5) == round(os.stat("../test_export.gdx").st_size, -5)
 
 def test_export_variable_with_changes():
-  db = dt.Gdx("test.gdx")
+  db = dt.Gdx("../test.gdx")
   db["qY"] = db["qY"] * 2
   db.export("test_export.gdx", relative_path=True)
-  old, new = dt.Gdx("test.gdx"), dt.Gdx("test_export.gdx")
+  old, new = dt.Gdx("../test.gdx"), dt.Gdx("../test_export.gdx")
   assert all(old["qY"] * 2 == new["qY"])
 
 def test_export_parameter_with_changes():
-  db = dt.Gdx("test.gdx")
+  db = dt.Gdx("../test.gdx")
   db["growth_factor"] = db["growth_factor"] * 2
   db.export("test_export.gdx", relative_path=True)
-  old, new = dt.Gdx("test.gdx"), dt.Gdx("test_export.gdx")
+  old, new = dt.Gdx("../test.gdx"), dt.Gdx("../test_export.gdx")
   assert all(old["growth_factor"] * 2 == new["growth_factor"])
 
 def test_export_scalar_with_changes():
-  db = dt.Gdx("test.gdx")
+  db = dt.Gdx("../test.gdx")
   db["eHh"] = db["eHh"] * 2
   db.export("test_export.gdx", relative_path=True)
 
-  old, new = dt.Gdx("test.gdx"), dt.Gdx("test_export.gdx")
+  old, new = dt.Gdx("../test.gdx"), dt.Gdx("../test_export.gdx")
   assert approximately_equal(old["eHh"] * 2, new["eHh"])
 
 def test_export_set_with_changes():
-  db = dt.Gdx("test.gdx")
+  db = dt.Gdx("../test.gdx")
   db["s"].texts["tje"] = "New text"
   db.export("test_export.gdx", relative_path=True)
-  assert dt.Gdx("test_export.gdx")["s"].texts["tje"] == "New text"
+  assert dt.Gdx("../test_export.gdx")["s"].texts["tje"] == "New text"
 
 def test_copy_set():
-  db = dt.Gdx("test.gdx")
+  db = dt.Gdx("../test.gdx")
   db["alias"] = db["s"]
   db["alias"].name = "alias"
   index = db["alias"]
@@ -212,14 +212,14 @@ def test_copy_set():
   index.domains = domains
   db.series[index.name] = index
   db.export("test_export.gdx", relative_path=True)
-  assert all(dt.Gdx("test_export.gdx")["alias"] == db["s"])
+  assert all(dt.Gdx("../test_export.gdx")["alias"] == db["s"])
 
 def test_export_added_variable():
-  db = dt.Gdx("test.gdx")
+  db = dt.Gdx("../test.gdx")
   db.create_variable("foo", [db.a, db.t], explanatory_text="Variable added from Python.")
   db["foo"] = 42
   db.export("test_export.gdx", relative_path=True)
-  assert all(approximately_equal(dt.Gdx("test_export.gdx")["foo"], 42))
+  assert all(approximately_equal(dt.Gdx("../test_export.gdx")["foo"], 42))
 
 def test_export_NAs():
   db = dt.GamsPandasDatabase()
@@ -227,9 +227,9 @@ def test_export_NAs():
   p = db.create_parameter("p", t)
   assert len(db["p"]) == 5
   assert len(db.symbols["p"]) == 0
-  db.export("test_export.gdx")
+  db.export("../test_export.gdx")
 
-  db = dt.Gdx("test_export.gdx")
+  db = dt.Gdx("../test_export.gdx")
   assert all(pd.isna(db["p"]))
   assert len(db["p"]) == 0
   assert len(db.symbols["p"]) == 0
@@ -275,7 +275,7 @@ def test_create_methods():
   assert pd.isna(y["tjenester",2010])
 
   # Test that created symbols can be exported
-  db.export("test_export.gdx")
+  db.export("../test_export.gdx")
 
 def test_import_export_empty():
   # Create empty GamsPandasDatabase and alias creation methods
@@ -290,42 +290,42 @@ def test_import_export_empty():
   db.p = p.loc[[], []]
   db.v = p.loc[[], []]
 
-  db.export("test_export.gdx")
-  db = dt.Gdx("test_export.gdx")
+  db.export("../test_export.gdx")
+  db = dt.Gdx("../test_export.gdx")
 
   for i in s:
     for j in t:
       db.p.loc[i, j] = 1
       db.v.loc[i, j] = 1
-  db.export("test_export.gdx")
-  db = dt.Gdx("test_export.gdx")
+  db.export("../test_export.gdx")
+  db = dt.Gdx("../test_export.gdx")
 
   assert all(db.p == 1)
   assert all(db.v == 1)
 
 def test_get_sparse():
-  db = dt.Gdx("test.gdx")
-  dense = dt.Gdx("test.gdx", sparse=False)
+  db = dt.Gdx("../test.gdx")
+  dense = dt.Gdx("../test.gdx", sparse=False)
   assert len(dense["qY"]) > len(db["qY"])
   assert len(dense["qY"]) == len(pd.MultiIndex.from_product(db.get("s_", "t")))
   assert len(dense["pBolig"]) == len(db["t"])
 
 def test_time_index_pos():
-  db = dt.Gdx("test.gdx")
+  db = dt.Gdx("../test.gdx")
   p = db.create_parameter("p", [db.s_, db.s, db.t], data=0)
   p_inv_sets = db.create_parameter("p_inv_sets", [db.t, db.s, db.s_], data=0)
   assert dt.DataFrame(p[:,'tje',:]).size == dt.DataFrame(p_inv_sets[:,'tje',:]).size
 
 def test_aggregation_with_2_sets():
-  db = dt.Gdx("test.gdx")
+  db = dt.Gdx("../test.gdx")
   p = db.create_parameter("p", [db.a_, db.portf_, db.t], data=0)
   assert dt.DataFrame(p).columns[0] == "p[tot,NetFin]"
 
 def test_compare():
-  db = dt.Gdx("test.gdx")
+  db = dt.Gdx("../test.gdx")
   with pytest.raises(ValueError):
     dt.DataFrame(db.qBNP, "q")
-  baseline = dt.REFERENCE_DATABASE = dt.Gdx("test.gdx")
+  baseline = dt.REFERENCE_DATABASE = dt.Gdx("../test.gdx")
   db.qBNP *= 1.01
   q = dt.DataFrame(db.qBNP, "q", start_year=2025)
   m = dt.DataFrame(db.qBNP, "m", start_year=2025)
@@ -333,7 +333,7 @@ def test_compare():
   assert ((15 < m) & (m < 25)).all().all()
 
 def test_aggregation():
-  db = dt.Gdx("test.gdx")
+  db = dt.Gdx("../test.gdx")
   default_set_aggregations={"s_": ["tje"]}
   y = dt.DataFrame(db.qY, default_set_aggregations=default_set_aggregations)
   k = dt.DataFrame(db.qK, default_set_aggregations=default_set_aggregations)

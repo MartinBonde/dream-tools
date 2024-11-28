@@ -6,6 +6,7 @@ close_bracket = r"[\)\]]"
 brackets = r"[\(\)\[\]]"
 no_brackets = r"[^\(\)\[\]]"
 ident = r"[A-Za-z0-9_]{1,62}" # A valid symbol in GAMS is a letter followed by up to 62 letters, numbers or underscores. gamY also accepts starting with a number or underscore.
+linebreak = r"(?:\r\n|\r|\n)"
 
 # Top level patterns for all commands. Used to recursively parse script.
 PATTERN_STRINGS = {
@@ -22,7 +23,7 @@ PATTERN_STRINGS = {
     "set": fr"""
 
                 \$set(global|local|)
-                \s*
+                \s+
                 ({ident})
                 \s+
                 ([^\s\;]+)
@@ -31,7 +32,7 @@ PATTERN_STRINGS = {
     "eval": fr"""
 
                 \$eval(global|local|)
-                \s*
+                \s+
                 ({ident})
                 \s+
                 ([^\;]+)
@@ -43,11 +44,13 @@ PATTERN_STRINGS = {
         ([^\s;]+)                # File name
     """,
 
-    "block": fr"\$Block\s+({ident})\s+(.*?)\$EndBlock",
+    "block": fr"\$Block\s+({ident})\s*({ident})?\s*(\$.+?)?\s*{linebreak}(.*?)\$EndBlock",
 
-    "group": fr"\$Group\s+({ident})\s+(.*?;)",  # 1) name, 2) content
+    "group": fr"\$Group(\+?)\s+({ident})\s+(.*?;)",  # 1) +? 2) name, 3) content
 
-    "pgroup": fr"\$PGroup\s+({ident})\s+(.*?;)",
+    "par_group": fr"\$P(?:ar)?Group(\+?)\s+({ident})\s+(.*?;)",  # 1) +? 2) name, 3) content
+
+    "set_group": fr"\$S(?:et)?Group(\+?)\s+({ident})\s+(.*?;)",  # 1) +? 2) name, 3) content
 
     "display": r"""
         \$Display\s
@@ -135,6 +138,12 @@ PATTERN_STRINGS = {
                         (.*?)
                         \$EndRegex(?P=regex_id)\b
                     """,
+
+    "eval_python": fr"""
+        \$EvalPython
+        (.*?) # Code
+        \$EndEvalPython
+    """
 }
 
 # Compile regex patterns
