@@ -293,7 +293,7 @@ class GamsPandasDatabase:
         index = self[index_names[0]]
       index.names = index_names
       series = pd.Series(0.0, index=index)
-      series = series + df[attribute]
+      series.update(df[attribute])
     series.name = symbol.name
     return series
 
