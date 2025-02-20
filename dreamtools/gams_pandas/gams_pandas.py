@@ -308,7 +308,10 @@ class GamsPandasDatabase:
       sparse = self.sparse
 
     if item not in self.series:
-      symbol = self.symbols[item]
+      if item in self.symbols:
+        symbol = self.symbols[item]
+      else:
+        symbol = self.database.get_symbol(item)
 
       if isinstance(symbol, gams.GamsSet):
         self.series[item] = index_from_symbol(symbol)
@@ -438,3 +441,10 @@ class GamsPandasDatabase:
   def get_text(self, name):
     """Get explanatory text of GAMS symbol."""
     return self.symbols[name].get_text()
+
+  def __contains__(self, item):
+    return (
+         item in self.series
+      or item in self.symbols
+      or self.database.get_symbol(item) is not None
+    )
