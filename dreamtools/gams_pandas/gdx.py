@@ -10,10 +10,7 @@ class Gdx(GamsPandasDatabase):
 
   def __init__(self, file_path, workspace=None, sparse=True):
     if not file_path:
-      import easygui
-      file_path = easygui.fileopenbox("Select reference gdx file", filetypes=["*.gdx"])
-      if not file_path:
-        raise ValueError("No file path was provided")
+      raise ValueError("No file path was provided")
     if not os.path.splitext(file_path)[1]:
       file_path = file_path + ".gdx"
     self.abs_path = os.path.abspath(file_path)
