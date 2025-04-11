@@ -5,7 +5,7 @@ open_bracket = r"[\(\[]"
 close_bracket = r"[\)\]]"
 brackets = r"[\(\)\[\]]"
 no_brackets = r"[^\(\)\[\]]"
-ident = r"[A-Za-z0-9_]{1,62}" # A valid symbol in GAMS is a letter followed by up to 62 letters, numbers or underscores. gamY also accepts starting with a number or underscore.
+ident = r"[A-Za-z_][A-Za-z0-9_]{0,61}" # A valid symbol in GAMS is a letter followed by up to 61 letters, numbers or underscores
 linebreak = r"(?:\r\n|\r|\n)"
 
 # Top level patterns for all commands. Used to recursively parse script.
@@ -143,7 +143,13 @@ PATTERN_STRINGS = {
         \$EvalPython
         (.*?) # Code
         \$EndEvalPython
-    """
+    """,
+
+    "exec_python": fr"""
+        \$ExecPython
+        (.*?) # Code
+        \$EndExecPython
+    """,
 }
 
 # Compile regex patterns
