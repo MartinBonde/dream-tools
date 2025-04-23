@@ -1,6 +1,6 @@
 from .gams_pandas import *
 
-__version__ = "3.3.0"
+__version__ = "3.3.1"
 
 # Global setting controlling the default name of the time index
 X_AXIS_NAME = "t"

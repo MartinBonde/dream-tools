@@ -602,7 +602,8 @@ class Precompiler:
     """Create an adjustment term for an equation, either additive or multiplicative."""
     # Extract first LHS variable info
     if var is None:
-      self.warning(f"No variable is associated with equation {eq_name}. No adjustment terms were added.")
+      if automatic_multiplicative_residuals_prefix or automatic_additive_residuals_prefix:
+        self.warning(f"No variable is associated with equation {eq_name}. No adjustment terms were added.")
       return RHS, replacement_text
     # Modify RHS based on adjustment type and define or add adjustment term to group of adjustment terms
     if automatic_multiplicative_residuals_prefix:
