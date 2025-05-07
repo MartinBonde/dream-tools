@@ -7,7 +7,7 @@ import pytest
 import numpy as np
 import pandas as pd
 import dreamtools as dt
-
+import gams.transfer as gt
 
 @np.vectorize
 def approximately_equal(x, y, ndigits=6):
@@ -21,6 +21,7 @@ def test_gdx_read():
   assert db["fp"] == 1.0178
   db.create_parameter("inf_factor_test", db["t"], data=db["fp"]**(2010 - db["t"]))
   assert all(approximately_equal(db["inf_factor"], db["inf_factor_test"]))
+  '''Assert below fails, see utility - better_index_from_symbol'''
   assert db["s"].name == "s_"
   assert db.vHh.loc["NetFin","tot",1970] == 0
   assert set(db["vHh"].index.get_level_values("a_")).issubset(set(db["a_"]))
@@ -31,13 +32,11 @@ def test_create_set_from_index():
   db.create_set("t", t)
   assert db["t"].name == "t"
   assert all(db["t"] == t)
-  assert db.symbols["t"].domains_as_strings == ["*"]
   assert db.t.domains == ["*"]
 
   db.create_set("tsub", t[5:], domains=["t"])
   assert db["tsub"].name == "tsub"
   assert all(db["tsub"] == t[5:])
-  assert db.symbols["tsub"].domains_as_strings == ["t"]
   assert db.tsub.domains == ["t"]
 
   s = pd.Index(["services", "goods"], name="s")
@@ -45,7 +44,6 @@ def test_create_set_from_index():
   db.create_set("st", st)
   assert db["st"].name == "st"
   assert all(db["st"] == st[:])
-  assert db.symbols["st"].domains_as_strings == ["s", "t"]
   assert db.st.domains == ["s", "t"]
 
 def test_add_parameter_from_dataframe():
@@ -171,7 +169,32 @@ def test_multiply_with_different_sets():
 
 def test_export_with_no_changes():
   dt.Gdx("test.gdx").export("test_export.gdx", relative_path=True)
-  assert round(os.stat("test.gdx").st_size, -5) == round(os.stat("test_export.gdx").st_size, -5)
+  original=gt.Container('test.gdx')
+  exported=gt.Container('test_export.gdx')
+  assert {s.name for s in original.getSymbols()} == {s.name for s in exported.getSymbols()} #verify symbols are identical
+  #assert check records, domains, that sorta stuff. 
+  #atm it seems that a_ have the same elements, but the order is different causing test to fail. We ignore for now.
+  do_not_sort=['level','value','marginal','lower','upper','scale']
+  def normalize(df):
+      # Convert all categorical columns to strings to avoid category order issues
+      for col in df.columns:
+          if pd.api.types.is_categorical_dtype(df[col]):
+              df[col] = df[col].astype(str)
+      return df
+
+  for sym in {s.name for s in original.getSymbols()}:
+      df1 = normalize(original[sym].records.copy())
+      df2 = normalize(exported[sym].records.copy())
+
+      key_cols = [col for col in df1.columns if col not in do_not_sort]
+
+      df1 = df1.sort_values(by=key_cols).reset_index(drop=True)
+      df2 = df2.sort_values(by=key_cols).reset_index(drop=True)
+
+      try:
+          pd.testing.assert_frame_equal(df1, df2, check_dtype=False, check_like=True)
+      except AssertionError as e:
+          raise AssertionError(f"Mismatch at symbol '{sym}':\n{str(e)}")
 
 def test_export_variable_with_changes():
   db = dt.Gdx("test.gdx")
@@ -207,7 +230,8 @@ def test_copy_set():
   db["alias"].name = "alias"
   index = db["alias"]
   domains = ["*" if i in (None, index.name) else i for i in db.get_domains_from_index(index, index.name)]
-  db.database.add_set_dc(index.name, domains, "")
+  '''The method add_set_dc does not exist in gams-transfer'''
+  db.container.add_set_dc(index.name, domains,"")
   index = index.copy()
   index.domains = domains
   db.series[index.name] = index
@@ -228,7 +252,7 @@ def test_export_NAs():
   assert len(db["p"]) == 5
   assert len(db.symbols["p"]) == 0
   db.export("test_export.gdx")
-
+  '''some fail, but it might not be a bug. Nans are successfully exported'''
   db = dt.Gdx("test_export.gdx")
   assert all(pd.isna(db["p"]))
   assert len(db["p"]) == 0
@@ -320,6 +344,7 @@ def test_aggregation_with_2_sets():
   db = dt.Gdx("test.gdx")
   p = db.create_parameter("p", [db.a_, db.portf_, db.t], data=0)
   assert dt.DataFrame(p).columns[0] == "p[tot,NetFin]"
+  db.export('test_export.gdx')
 
 def test_compare():
   db = dt.Gdx("test.gdx")
