@@ -5,10 +5,10 @@ import numpy as np
 import pandas as pd
 import logging
 import builtins
-import time
+#import time
 from copy import deepcopy
 import gams.transfer as gt
-from .utility import better_index_from_symbol, symbol_is_scalar, is_iterable, index_names_from_symbol, \
+from .utility import domains_as_strings,better_index_from_symbol, symbol_is_scalar, is_iterable, index_names_from_symbol, \
   all_na, map_to_int_where_possible,safe_set_records
 
 logger = logging.getLogger(__name__)
@@ -30,9 +30,8 @@ class GamsPandasDatabase:
     self.reference_database = reference_database
     self.series = {}
     '''
-    When modfying a symbol in a series or dataframe, symbol domains are converted to strings.
-    This feature is convenient in python, but causes problems on export to GDX as GAMS expects domains to gams sets.
-    To mitigate this, we track touched symbols and reconvert them to their original types on export.
+    When modfying a symbol in a series or dataframe, we need to rewrite those changes to the GAMS-objects in the container.
+    To do this efficiently, we add symbols to _modified_symbols, and commit_changes to the relevant symbols when calling export.
     '''
     self._modified_symbols=set()
   def __getattr__(self, item):
@@ -46,7 +45,7 @@ class GamsPandasDatabase:
     obj.__dict__.update(self.__dict__)
     obj.series = deepcopy(self.series)
     return obj
-
+    
   def merge(self, other, symbol_names=None, inplace=False):
     """
     Merge two GamsPandasDatabases.
@@ -171,8 +170,15 @@ class GamsPandasDatabase:
       multi_index.names = [getattr(i, "names", None) for i in x]
       return multi_index
     else:
-      return pd.Index(x)
+      return pd.Index(x)    
 
+  def add_set_dc(self,identifier,domains,explanatory_text=""):
+    '''reconstructed, mainly for copying sets already in the database to a new GAMS-symbol'''
+    records=self.series[identifier]
+    records.names=domains
+    self.create_set(identifier,records,explanatory_text)
+    pass
+    
   def create_set(self, name, index, explanatory_text="", texts=None, domains=None):
     """
     Add a new GAMS Set to the database and return an Pandas representation of the Set.
@@ -207,7 +213,7 @@ class GamsPandasDatabase:
     if domains==["*"]:
       gt.Set(self.container,name=index.name,domain='*',description=explanatory_text,records=list(index.unique()))
     else:
-      #If parent set does not exist, it is created with domain='*' 
+      #If parent set does not exist, it is created with domain='*' (universal set)
       for d in domains:
         if not (d in self.container and isinstance(self.container[d],gt.Set)) and d!='*':
           gt.Set(self.container,name=d,domain='*',records=list(index.get_level_values(d).unique())) 
@@ -275,6 +281,7 @@ class GamsPandasDatabase:
   def series_from_symbol(self, symbol, sparse, attributes, attribute):
     index_names = index_names_from_symbol(symbol)
     df=self.container[symbol.name].records
+    self._modified_symbols.add(symbol.name)
     for i in index_names:
       df[i] = map_to_int_where_possible(df[i])
     df.set_index(index_names, inplace=True)
@@ -311,6 +318,14 @@ class GamsPandasDatabase:
         symbol=self.container.getSymbols(item)
       if isinstance(symbol, gt.Set):
         self.series[item] = better_index_from_symbol(symbol)
+        '''This feels ok. It solves the issue of when calling a gams-object to series, we want sets to have their domains as names, but variables and parametres indexed by sets
+        should have the set's actual names as index-names. This makes it so that when a set is defined on another set, it will always be indexed by that set, and just have its own name otherwise.
+        The upside here is that when calling a set to series, the domain-information - if there is any, is preserved in the name of the series.
+        It will however also be the case that when we define a variable or parameter on a set with a domain, that the domain will be the index header.
+        This is probably fine, the information being written to GAMS is the same and I don't really seee a serious information loss...
+        '''
+        if not self.container[symbol.name].domain==['*']:
+          self.series[item].names=domains_as_strings(self.container[symbol.name])
       elif isinstance(symbol, gt.Variable):
         if symbol_is_scalar(symbol):
           val = self.container[symbol.name].records['level'].iloc[0]
@@ -319,7 +334,6 @@ class GamsPandasDatabase:
           self.series[item] = self.series_from_variable(symbol, sparse)
           if self.auto_sort_index:
             self.series[item] = self.series[item].sort_index()
-
       elif isinstance(symbol, gt.Parameter):
         if symbol_is_scalar(symbol):
           val = self.container[symbol.name].records['value'].iloc[0]
@@ -334,7 +348,6 @@ class GamsPandasDatabase:
     return self.series[item]
   
   def __getitem__(self, item):
-    self._modified_symbols.add(item)
     return self.getitem(item)
   
   def __setitem__(self, name, value):
@@ -346,7 +359,6 @@ class GamsPandasDatabase:
     else:
       value.name = name
       self.series[name] = value
-    self._modified_symbols.add(name)
 
   def items(self):
     return self.symbols.items()
@@ -363,8 +375,41 @@ class GamsPandasDatabase:
       series_names = self.series.keys()
     for symbol_name in series_names:
       self.set_symbol_records(self.symbols[symbol_name], self.series[symbol_name])
+  
+  def commit_changes(self):
+    '''a method to commit changes to pandas objects to the GAMS-object they represent. This is called on export'''
+    for symbol_name in self._modified_symbols:
+        series = self.series[symbol_name]
+        gams_symbol = self.container[symbol_name]
+        records_df = gams_symbol.records
+
+        # Convert Index to Series if necessary
+        if isinstance(series, pd.Index):
+            series = pd.Series([None] * len(series), index=series)
+
+        # Determine value column
+        value_col = next((c for c in ['text', 'value', 'level'] if c in records_df.columns), None)
+
+        new_records = []
+
+        for index, val in series.items():
+            if not isinstance(index, tuple):
+                index = (index,)
+            keys = tuple(str(k) for k in index)
+
+            # Construct dict for each record
+            rec = {f"dim{i+1}": key for i, key in enumerate(keys)}
+            if value_col:
+                rec[value_col] = val
+            new_records.append(rec)
+
+        #replace records
+        gams_symbol.setRecords(new_records)
+
+    self._modified_symbols.clear()
 
   def export(self, path):
+    self.commit_changes()
     self.container.write(os.path.abspath(path))
 
   def set_parameter_records(self, symbol, value):
@@ -387,7 +432,6 @@ class GamsPandasDatabase:
               value[dom_col] = value[dom_col].astype("category")
           # Coerce categories to string
           value[dom_col] = value[dom_col].cat.rename_categories(lambda x: str(x))
-      #symbol.add_record(map_lowest_level(str, k)).value = v
       symbol.setRecords(value)
 
   @staticmethod
@@ -408,13 +452,13 @@ class GamsPandasDatabase:
       for attr in ['marginal', 'lower', 'upper', 'scale']:
         if attr not in value.columns:
           value[attr] = np.nan
-      print(symbol.domain)
       for dom_col in [d.name for d in symbol.domain if hasattr(d,'name')]:
           if value[dom_col].dtype.name != "category":
               value[dom_col] = value[dom_col].astype("category")
           # Coerce categories to string
           value[dom_col] = value[dom_col].cat.rename_categories(lambda x: str(x))
       safe_set_records(symbol,value)
+
   '''I'm pretty sure this method is not being used, idk if we want to keep it for backwards compatibility'''
   @staticmethod
   def set_set_records(symbol, value):
@@ -424,14 +468,11 @@ class GamsPandasDatabase:
 
     if all_na(value): pass
     elif symbol_is_scalar(symbol):
-      #symbol.add_record().text = str(value)
       symbol.setRecords(value)
     elif list(value.keys()) == [0]:  # If singleton series
-      #symbol.add_record().text = value[0]
       symbol.setRecords(value)
     else:
       for k, v in value.items():
-        #symbol.add_record(map_lowest_level(str, k)).text = v
         symbol.setRecords(str(k),v)
   
   def set_symbol_records(self, symbol, value):

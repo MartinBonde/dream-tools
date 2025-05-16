@@ -1,6 +1,5 @@
 import os
 
-import gams
 import gams.transfer as gt
 
 from .gams_pandas import GamsPandasDatabase, logger
