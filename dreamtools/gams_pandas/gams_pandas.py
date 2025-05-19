@@ -5,10 +5,9 @@ import numpy as np
 import pandas as pd
 import logging
 import builtins
-#import time
 from copy import deepcopy
 import gams.transfer as gt
-from .utility import domains_as_strings,better_index_from_symbol, symbol_is_scalar, is_iterable, index_names_from_symbol, \
+from .utility import domains_as_strings,index_from_symbol, symbol_is_scalar, is_iterable, index_names_from_symbol, \
   all_na, map_to_int_where_possible,safe_set_records
 
 logger = logging.getLogger(__name__)
@@ -82,22 +81,22 @@ class GamsPandasDatabase:
   @property
   def sets(self):
     """Dictionary of all sets in the underlying GAMS database"""
-    return {symbol.name: symbol for symbol in self.container.getSymbols() if isinstance(symbol, gt.Set)}
+    return {symbol.name: symbol for symbol in self.container.getSets()}
 
   @property
   def variables(self):
     """Dictionary of all variables in the underlying GAMS database"""
-    return {symbol.name: symbol for symbol in self.container.getSymbols() if isinstance(symbol, gt.Variable)}
+    return {symbol.name: symbol for symbol in self.container.getVariables()}
 
   @property
   def parameters(self):
     """Dictionary of all parameters in the underlying GAMS database"""
-    return {symbol.name: symbol for symbol in self.getSymbols() if isinstance(symbol, gt.Parameter)}
+    return {symbol.name: symbol for symbol in self.getParameters()}
 
   @property
   def equations(self):
     """Dictionary of all equations in the underlying GAMS database"""
-    return {symbol.name: symbol for symbol in self.getSymbols() if isinstance(symbol, gt.Equation)}
+    return {symbol.name: symbol for symbol in self.getEquations()}
   
   def add_to_builtins(self, *args):
     """Retrieve any number symbol names from the database and add their Pandas representations to the global namespace."""
@@ -115,9 +114,12 @@ class GamsPandasDatabase:
     """Add parameter symbol to database based on a Pandas DataFrame."""
     domains = list(df.columns[:value_column_index:])
     for d in domains:
-      if not (d in self.container and isinstance(self.container[d],gt.Set)) and d!='*':
+      if not d in self.sets and d!='*':
         if add_missing_domains:
           self.create_set(name=d, index=df[d].unique(), explanatory_text="") #only add sets/records if they do not exist
+        else:
+          raise KeyError(
+            f"'{d}' is not a set in the database. Enable add_missing_domains or add the set to the database manually.")
     gt.Parameter(self.container,name=identifier,domain=domains,description=explanatory_text,records=df.values.tolist())
     if domains:
       series = df.set_index(domains).iloc[:, 0]
@@ -138,7 +140,7 @@ class GamsPandasDatabase:
     """Add variable symbol to database based on a Pandas DataFrame."""
     domains = list(df.columns[:value_column_index:])
     for d in domains:
-      if not (d in self.container and isinstance(self.container[d],gt.Set)) and d!='*':
+      if not d in self.sets and d!='*':
         if add_missing_domains:
           self.create_set(name=d, index=df[d].unique(), explanatory_text="") #Only add sets/records if they do not exist
         else:
@@ -210,14 +212,10 @@ class GamsPandasDatabase:
     index.domains = domains
     index.names = domains
     index.name = name
-    if domains==["*"]:
-      gt.Set(self.container,name=index.name,domain='*',description=explanatory_text,records=list(index.unique()))
-    else:
-      #If parent set does not exist, it is created with domain='*' (universal set)
-      for d in domains:
-        if not (d in self.container and isinstance(self.container[d],gt.Set)) and d!='*':
-          gt.Set(self.container,name=d,domain='*',records=list(index.get_level_values(d).unique())) 
-      gt.Set(self.container,name=index.name,domain=domains,description=explanatory_text,records=list(index.unique()))
+    for d in domains:
+      if not d in self.sets and d!='*':
+        gt.Set(self.container,name=d,domain='*',records=list(index.get_level_values(d).unique())) 
+    gt.Set(self.container,name=index.name,domain=domains,description=explanatory_text,records=list(index.unique()))
     self.series[index.name] = index
     return self[name]
 
@@ -317,7 +315,7 @@ class GamsPandasDatabase:
       else:
         symbol=self.container.getSymbols(item)
       if isinstance(symbol, gt.Set):
-        self.series[item] = better_index_from_symbol(symbol)
+        self.series[item] = index_from_symbol(symbol)
         '''This feels ok. It solves the issue of when calling a gams-object to series, we want sets to have their domains as names, but variables and parametres indexed by sets
         should have the set's actual names as index-names. This makes it so that when a set is defined on another set, it will always be indexed by that set, and just have its own name otherwise.
         The upside here is that when calling a set to series, the domain-information - if there is any, is preserved in the name of the series.
@@ -427,7 +425,7 @@ class GamsPandasDatabase:
       else:
           raise TypeError(f"Unsupported type for setting parameter '{symbol.name}': {type(value)}")
       # Coerce categories to string
-      for dom_col in [d.name for d in symbol.domain]:
+      for dom_col in [d.name for d in symbol.domain if hasattr(d,'name')]:
           if value[dom_col].dtype.name != "category":
               value[dom_col] = value[dom_col].astype("category")
           # Coerce categories to string
@@ -459,7 +457,6 @@ class GamsPandasDatabase:
           value[dom_col] = value[dom_col].cat.rename_categories(lambda x: str(x))
       safe_set_records(symbol,value)
 
-  '''I'm pretty sure this method is not being used, idk if we want to keep it for backwards compatibility'''
   @staticmethod
   def set_set_records(symbol, value):
     if isinstance(value, pd.Index):

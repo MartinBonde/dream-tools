@@ -33,7 +33,7 @@ def index_names_from_symbol(symbol):
         index_names[i] = f"index_{i}"
   return index_names
 
-def better_index_from_symbol(symbol):
+def index_from_symbol(symbol):
   """Return a Pandas Index based on the records and domain names of a GAMS symbol."""
   records=symbol.records
   if len(domains_as_strings(symbol)) > 1:

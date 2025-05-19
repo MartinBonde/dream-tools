@@ -21,7 +21,6 @@ def test_gdx_read():
   assert db["fp"] == 1.0178
   db.create_parameter("inf_factor_test", db["t"], data=db["fp"]**(2010 - db["t"]))
   assert all(approximately_equal(db["inf_factor"], db["inf_factor_test"]))
-  '''Assert below fails, see utility - better_index_from_symbol'''
   assert db["s"].name == "s_"
   assert db.vHh.loc["NetFin","tot",1970] == 0
   assert set(db["vHh"].index.get_level_values("a_")).issubset(set(db["a_"]))
@@ -135,11 +134,13 @@ def test_create_parameter():
                      ], columns=["t", "s", "value"]),
                      add_missing_domains=True
                      )
+  db.create_parameter("scalar_empty")
   db.export("test_export.gdx")
   assert dt.Gdx("test_export.gdx")["scalar"] == 3.2
   assert all(dt.Gdx("test_export.gdx")["vector"] == [1, 2])
   assert all(db.s == ["ser", "goo"])
   assert all(db.t == [2025, 2035])
+  assert(np.isnan(dt.Gdx("test_export.gdx")["scalar_empty"]))
 
 def test_add_variable_from_series():
   db = dt.GamsPandasDatabase()
@@ -322,7 +323,7 @@ def test_import_export_empty():
   db.export("test_export.gdx")
   db = dt.Gdx("test_export.gdx")
 
-  #assert all(db.p == 1)
+  assert all(db.p == 1)
   assert all(db.v == 1)
 
 def test_get_sparse():
@@ -364,3 +365,22 @@ def test_aggregation():
   ky = dt.DataFrame([db.qK, db.qY], default_set_aggregations=default_set_aggregations)
   
   assert y.size + k.size == yk.size == ky.size
+
+def test_subset_arithmetic():
+  db=dt.Gdx("test.gdx")
+  db.create_parameter("superset", [db.a_, db.t], data=2)
+  db.create_parameter("subset", [db.a, db.t], data=3)
+  db.create_variable("supersetvar", [db.a_, db.t], data=2)
+  db.create_variable("subsetvar", [db.a, db.t], data=3)
+
+  db.create_parameter("add_test", [db.a, db.t], data=db['subset']+db['superset'])
+  db.create_parameter("multiply_test", [db.a, db.t], data=db['subset']*db['superset'])
+  db.create_variable("add_testvar", [db.a, db.t], data=db['subsetvar']+db['supersetvar'])
+  db.create_variable("multiply_testvar", [db.a, db.t], data=db['subsetvar']*db['supersetvar'])
+
+  db.export("test_export.gdx")
+  db=dt.Gdx("test_export.gdx")
+  assert all(db['add_test'] == 5)
+  assert all(db['multiply_test'] == 6)
+  assert all(db['add_testvar'] == 5)
+  assert all(db['multiply_testvar'] == 6)
