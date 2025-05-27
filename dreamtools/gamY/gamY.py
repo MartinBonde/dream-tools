@@ -159,7 +159,7 @@ def get_lst_path(file_path):
 class Precompiler:
   """Object with methods to parse each gamY command"""
 
-  def __init__(self, file_path, patterns=PATTERNS, additive_adjust=None, multiplicative_adjust=None):
+  def __init__(self, file_path, patterns=PATTERNS):
     self.groups = CaseInsensitiveDict({"all": {}})
     self.groups_conditions = CaseInsensitiveDict({"all": {}})
     self.par_groups = CaseInsensitiveDict({"all": {}})
@@ -172,24 +172,13 @@ class Precompiler:
     self.locals = {}
 
     self.has_read_file = False
-
-    self.adjustment_terms = []
-    if additive_adjust is not None:
-      self.additive_adjust = additive_adjust
-    else:
-      self.additive_adjust = automatic_additive_residuals_prefix
-    if multiplicative_adjust is not None:
-      self.multiplicative_adjust = multiplicative_adjust
-    else:
-      self.multiplicative_adjust = automatic_multiplicative_residuals_prefix
-    
-    if additive_adjust:
-      self.adjustment_terms.append(additive_adjust)
-    if multiplicative_adjust:
-      self.adjustment_terms.append(multiplicative_adjust)
-    for term in self.adjustment_terms:
-      self.groups[term] = Group()
-      self.groups_conditions[term] = {}
+   
+    if automatic_additive_residuals_prefix:
+      self.groups[automatic_additive_residuals_prefix] = Group()
+      self.groups_conditions[automatic_additive_residuals_prefix] = {}
+    if automatic_multiplicative_residuals_prefix:
+      self.groups[automatic_multiplicative_residuals_prefix] = Group()
+      self.groups_conditions[automatic_multiplicative_residuals_prefix] = {}
 
     self.model_counter = 0  # As models cannot be redefined, we increment the names of temporary models defined
 
@@ -233,6 +222,7 @@ class Precompiler:
       ("for_loop", self.for_loop),
       ("loop", self.loop),
       ("eval_python", self.eval_python),
+      ("exec_python", self.exec_python),
     ]
     self.commands = self.recursive_commands + self.top_down_commands
     self.prev_match = None
@@ -555,39 +545,16 @@ class Precompiler:
     else:
       return pattern.sub(new[1:-1], expression)
 
-  # def generate_equation_name(self, var, sets, conditions):
-  #   """Generate unique equation name based on the name, sets, and conditions of the associated endogenous variable."""
-  #   suffix = self.sets_to_conditions(sets, var, conditions)
-  #   if not suffix:
-  #     return f"{variable_equation_prefix}{var.name}"
-
-  #   # Remove sets denoted with square brackets, special characters, and whitespace
-  #   suffix = re.sub(r"\[.+?\]", "", suffix)
-    
-  #   # Replace comparison operators with their corresponding abbreviations
-  #   suffix = re.sub(r">=", "GE", suffix)
-  #   suffix = re.sub(r"<=", "LE", suffix)
-  #   suffix = re.sub(r"<", "LT", suffix)
-  #   suffix = re.sub(r">", "GT", suffix)
-  #   suffix = re.sub(r"=", "EQ", suffix)
-  #   suffix = re.sub(r"<>", "NE", suffix)
-
-  #   # Replace whitespace with underscores
-  #   suffix = re.sub(r"\s+", "_", suffix)
-
-  #   # Remove other special characters
-  #   suffix = re.sub(r"[^A-Za-z0-9_]", "", suffix)
-
-  #   return f"{variable_equation_prefix}{var.name}_{suffix}"
-
-  def generate_equation_name(self, name, sets, suffix):
+  def generate_equation_name(self, eq_name, var, sets, suffix):
+      if not eq_name:
+        eq_name = var
       if sets and not suffix:
         suffix = "_" + sets[1:-1].replace(",", "_").replace(" ", "")
         if suffix.endswith("_t"):
           suffix = suffix[:-2]
-        if name.endswith(suffix):
+        if eq_name.endswith(suffix):
           suffix = ""
-      return variable_equation_prefix + name + suffix
+      return variable_equation_prefix + eq_name + suffix
 
   @staticmethod
   def merge_conditions(*args):
@@ -596,42 +563,83 @@ class Precompiler:
       return f"$({' and '.join(args)})"
     return ""
 
-  def check_if_variable_exists(self, name):
-    if name not in self.groups["all"]:
-      self.error(f"Variable '{name}' must be defined before being used in a block.")
+  def is_variable(self, name):
+    return name and name in self.groups["all"]
+  
+  def find_associated_variable(self, eq_name, sets, LHS, RHS):
+    """Return the variable associated with an equation."""
+    if not eq_name:
+      return self.find_lhs_variable(LHS)
+    if eq_name.startswith("E_"): # Mostly for MAKRO, where we do not yet have explicit mappings
+      if "_via_" in eq_name:
+        name = eq_name.split("_via_")[1].split("_")[0]
+      else:
+        name = eq_name[2:]
+        while "_" in name:
+          if self.is_variable(name):
+            break
+          name = "_".join(name.split("_")[:-1])
+      if self.is_variable(name):
+        var_set_pattern = re.compile(f"(?:^|\\b)({name})({open_bracket}[^$]+?{close_bracket})", re.IGNORECASE | re.MULTILINE)
+        match = var_set_pattern.search(LHS + " " + RHS)
+        if match: # If we the variable is found in the equation, we use the sets in the equation
+          return match.groups()
+    if self.is_variable(eq_name):
+      return eq_name, sets
+    return None, None
+    
+  def find_lhs_variable(self, LHS):
+    """Return the first variable in the LHS of an equation."""
+    lhs_variable_pattern = re.compile(f"({ident})({open_bracket}[^$]+?{close_bracket})?", re.IGNORECASE | re.MULTILINE)
+    match = lhs_variable_pattern.search(LHS)
+    if match:
+      var, var_sets = match.groups()     
+      if self.is_variable(var):
+        return var, var_sets
+    return (None, None)
+  
+  def add_adjustment_terms(self, eq_name, var, var_sets, LHS, RHS, replacement_text):
+    """Create an adjustment term for an equation, either additive or multiplicative."""
+    # Extract first LHS variable info
+    if var is None:
+      if automatic_multiplicative_residuals_prefix or automatic_additive_residuals_prefix:
+        self.warning(f"No variable is associated with equation {eq_name}. No adjustment terms were added.")
+      return LHS, RHS, replacement_text
 
-  def create_additive_adjustment_term(self, model_name, name, sets, RHS, replacement_text):
-    j_name = self.additive_adjust + name
-    j_group_name = f"{self.additive_adjust}_{model_name}"
-    docstring = f"Additive adjustment term for equation {name}"
-    replacement_text += f" VARIABLE {j_name}{sets} \"{docstring}\"; {j_name}.FX{sets} = 0;"
-    if j_group_name not in self.groups:
-      self.groups[j_group_name] = Group()
-      self.groups_conditions[j_group_name] = {}
-    j_var = Variable(j_name, sets, docstring)
-    self.groups[self.additive_adjust][j_name] = j_var
-    self.groups["all"][j_name] = j_var
-    self.groups[j_group_name][j_name] = j_var
-    if RHS.strip()[0] == "-":
-      RHS = f"{self.additive_adjust}{name}{sets} {RHS}"
-    else:
-      RHS = f"{self.additive_adjust}{name}{sets} + {RHS}"
-    return RHS, replacement_text
+    # Prepare regex pattern for the variable and its specific sets found in the equation
+    escaped_var = re.escape(var)
+    # Escape brackets etc. in sets if they exist
+    escaped_sets = re.escape(var_sets) if var_sets else ""
+    # Use word boundary \b to match whole words only, preventing partial matches (e.g., var vs var_extra)
+    pattern = re.compile(rf"\b{escaped_var}\b{escaped_sets}", re.IGNORECASE)
 
-  def create_multiplicative_adjustment_term(self, model_name, name, sets, RHS, replacement_text):
-    j_name = self.multiplicative_adjust + name
-    j_group_name = f"{self.multiplicative_adjust}_{model_name}"
-    docstring = f"Multiplicative adjustment term for equation {name}"
-    replacement_text += f"VARIABLE {j_name}{sets} \"{docstring}\"; {j_name}.FX{sets} = 0;"
-    if j_group_name not in self.groups:
-      self.groups[j_group_name] = Group()
-      self.groups_conditions[j_group_name] = {}
-    j_var = Variable(j_name, sets, docstring)
-    self.groups[self.multiplicative_adjust][j_name] = j_var
-    self.groups["all"][j_name] = j_var
-    self.groups[j_group_name][j_name] = j_var
-    RHS = f"(1+{self.multiplicative_adjust}{name}{sets}) * ({RHS})"
-    return RHS, replacement_text
+    # Canonical sets for the adjustment variable itself (might differ from var_sets if subsetting was used)
+    canonical_sets = self.groups['all'][var].sets
+
+    # Modify LHS/RHS based on adjustment type and add adjustment term to its group
+    if automatic_multiplicative_residuals_prefix:
+      prefix = automatic_multiplicative_residuals_prefix
+      j_name = prefix + var
+      # Define the adjustment term group using its canonical sets
+      replacement_text += f"$GROUP+ {prefix} {j_name}{canonical_sets} 'Multiplicative adjustment term in equations for {var}';"
+      # Apply the adjustment term using the specific sets found in the equation (var_sets)
+      # \g<0> in the replacement string refers to the entire matched text (var[sets])
+      mult_repl = rf"(\g<0> * (1+{j_name}{var_sets}))"
+      LHS = pattern.sub(mult_repl, LHS)
+      RHS = pattern.sub(mult_repl, RHS)
+
+    if automatic_additive_residuals_prefix:
+      prefix = automatic_additive_residuals_prefix
+      j_name = prefix + var
+      # Define the adjustment term group using its canonical sets
+      replacement_text += f"$GROUP+ {prefix} {j_name}{canonical_sets} 'Additive adjustment term in equations for {var}';"
+      # Apply the adjustment term using the specific sets found in the equation (var_sets)
+      # \g<0> in the replacement string refers to the entire matched text (var[sets])
+      add_repl = rf"(\g<0> + {j_name}{var_sets})"
+      LHS = pattern.sub(add_repl, LHS)
+      RHS = pattern.sub(add_repl, RHS)
+    
+    return LHS, RHS, replacement_text
 
   def block_define(self, match, text):
     """
@@ -663,40 +671,35 @@ class Precompiler:
       (.+?)\;              #  RHS
     """, re.VERBOSE | re.MULTILINE | re.DOTALL | re.IGNORECASE)
 
-    lhs_variable_pattern = re.compile(f"({ident})({open_bracket}[^$]+?{close_bracket})?", re.IGNORECASE | re.MULTILINE)
-
     model_name, group_name, block_conditions, content = match.groups()
     replacement_text = f"\n# ----- gamY: Initialize {model_name} equation block -----\n"
     self.blocks[model_name] = Block()
     replacement_text += f"\n$GROUP {group_name} ;\n"
+    
     for equation_match in equation_pattern.finditer(self.remove_comments(content)):
-      name, suffix, sets, conditions, LHS, RHS = (
+      eq_name, suffix, sets, conditions, LHS, RHS = (
         group if group is not None else "" for group in equation_match.groups()
       )
 
-      if not name:
-        name, var_sets = lhs_variable_pattern.search(LHS).groups()
-        if not sets:
-          sets = var_sets
+      var, var_sets = self.find_associated_variable(eq_name, sets, LHS, RHS)
 
-      if group_name:
-        self.check_if_variable_exists(name)
+      if not sets and var_sets:
+        sets = var_sets
+  
+      if group_name and var is None:
+        self.error(f"Variable '{eq_name}' must be defined before being used in a block.")
 
       merged_conditions = self.merge_conditions(block_conditions, conditions)
 
-      if name in self.groups["all"] and automatic_dummy_suffix:
-        merged_conditions = self.merge_conditions(merged_conditions, f"{name}{automatic_dummy_suffix}{sets}")
+      if var and automatic_dummy_suffix:
+        merged_conditions = self.merge_conditions(merged_conditions, f"{var}{automatic_dummy_suffix}{sets}")
       
       if group_name:
-        replacement_text += f"$GROUP+ {group_name} {name}{sets}{merged_conditions};"
+        replacement_text += f"$GROUP+ {group_name} {var}{sets}{merged_conditions};"
+        eq_name = self.generate_equation_name(eq_name, var, sets, suffix[1:])
+
+      LHS, RHS, replacement_text = self.add_adjustment_terms(eq_name, var, var_sets, LHS, RHS, replacement_text)
     
-      if self.additive_adjust:
-        RHS, replacement_text = self.create_additive_adjustment_term(model_name, name, sets, RHS, replacement_text)
-      if self.multiplicative_adjust:
-        RHS, replacement_text = self.create_multiplicative_adjustment_term(model_name, name, sets, RHS, replacement_text)
-
-      eq_name = self.generate_equation_name(name, sets, suffix[1:]) if group_name else name
-
       eq = Equation(eq_name, sets, merged_conditions, LHS, RHS)
       self.blocks[model_name][eq.name] = eq
       replacement_text += f"EQUATION {eq.name}{eq.sets};"
@@ -759,16 +762,6 @@ class Precompiler:
     #  Define an equation block, so that the model can be used in the same ways a regular blocks
     self.blocks[model_name] = new_model
 
-    #  Define a group of all the adjustment variables in model, with the name "Adjust_[model_name]"
-    for j in self.adjustment_terms:
-      j_group_name = f"{j}_{model_name}"
-      if j_group_name not in self.groups:
-        self.groups[j_group_name] = {}
-        self.groups_conditions[j_group_name] = {}
-        for eq in new_model.values():
-          j_name = j+eq.name
-          self.groups[j_group_name][j_name] = self.groups[j][j_name]
-
     return replacement_text
 
   def sets_to_conditions(self, set, var, item_conditions):
@@ -820,17 +813,14 @@ class Precompiler:
       GROUPS = self.par_groups
       CONDITIONS = self.par_groups_conditions
       L = ""
-      DUMMY_SUFFIX = None
     elif sym_type == "Set":
       GROUPS = self.set_groups
       CONDITIONS = self.set_groups_conditions
       L = ""
-      DUMMY_SUFFIX = None
     else:
       GROUPS = self.groups
       CONDITIONS = self.groups_conditions
       L = ".L"
-      DUMMY_SUFFIX = automatic_dummy_suffix
 
     add_to_existing, group_name, content = match.groups()
     content = self.remove_comments(content)
@@ -905,8 +895,8 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
         new_group[var.name] = GROUPS["all"][var.name]
       else:
         replacement_text += f"{sym_type} {var.name}{var.sets} {var.label} //;\n"
-        if DUMMY_SUFFIX:
-          replacement_text += f"SET {var.name}{DUMMY_SUFFIX}{var.sets};\n"
+        if automatic_dummy_suffix and sym_type == "Variable":
+          replacement_text += f"SET {var.name}{automatic_dummy_suffix}{var.sets};\n"
         new_group[var.name] = var
 
       # Set levels if a value is given
@@ -1215,6 +1205,14 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
     """
     code = dedent(match.group(1))
     return eval(code)
+
+  def exec_python(self, match, text):
+    """
+    Exectute python code
+    """
+    code = dedent(match.group(1))
+    exec(code)
+    return ""
 
   def display(self, match, text, ignore_conditionals=False):
     """
