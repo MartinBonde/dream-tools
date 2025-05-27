@@ -598,27 +598,48 @@ class Precompiler:
         return var, var_sets
     return (None, None)
   
-  def add_adjustment_terms(self, eq_name, var, var_sets, RHS, replacement_text):
+  def add_adjustment_terms(self, eq_name, var, var_sets, LHS, RHS, replacement_text):
     """Create an adjustment term for an equation, either additive or multiplicative."""
     # Extract first LHS variable info
     if var is None:
       if automatic_multiplicative_residuals_prefix or automatic_additive_residuals_prefix:
         self.warning(f"No variable is associated with equation {eq_name}. No adjustment terms were added.")
-      return RHS, replacement_text
-    # Modify RHS based on adjustment type and define or add adjustment term to group of adjustment terms
+      return LHS, RHS, replacement_text
+
+    # Prepare regex pattern for the variable and its specific sets found in the equation
+    escaped_var = re.escape(var)
+    # Escape brackets etc. in sets if they exist
+    escaped_sets = re.escape(var_sets) if var_sets else ""
+    # Use word boundary \b to match whole words only, preventing partial matches (e.g., var vs var_extra)
+    pattern = re.compile(rf"\b{escaped_var}\b{escaped_sets}", re.IGNORECASE)
+
+    # Canonical sets for the adjustment variable itself (might differ from var_sets if subsetting was used)
+    canonical_sets = self.groups['all'][var].sets
+
+    # Modify LHS/RHS based on adjustment type and add adjustment term to its group
     if automatic_multiplicative_residuals_prefix:
-      j_name = automatic_multiplicative_residuals_prefix + var
-      replacement_text += f"$GROUP+ {automatic_multiplicative_residuals_prefix} {j_name}{self.groups['all'][var].sets} 'Multiplicative adjustment term in equations for {var}';"
-      RHS = f"(1+{j_name}{var_sets}) * ({RHS})"
+      prefix = automatic_multiplicative_residuals_prefix
+      j_name = prefix + var
+      # Define the adjustment term group using its canonical sets
+      replacement_text += f"$GROUP+ {prefix} {j_name}{canonical_sets} 'Multiplicative adjustment term in equations for {var}';"
+      # Apply the adjustment term using the specific sets found in the equation (var_sets)
+      # \g<0> in the replacement string refers to the entire matched text (var[sets])
+      mult_repl = rf"(\g<0> * (1+{j_name}{var_sets}))"
+      LHS = pattern.sub(mult_repl, LHS)
+      RHS = pattern.sub(mult_repl, RHS)
+
     if automatic_additive_residuals_prefix:
-      j_name = automatic_additive_residuals_prefix + var
-      replacement_text += f"$GROUP+ {automatic_additive_residuals_prefix} {j_name}{self.groups['all'][var].sets} 'Additive adjustment term in equations for {var}';"
-      if RHS.strip().startswith("-"):
-          RHS = f"{j_name}{var_sets} {RHS}"
-      else:
-          RHS = f"{j_name}{var_sets} + {RHS}"           
+      prefix = automatic_additive_residuals_prefix
+      j_name = prefix + var
+      # Define the adjustment term group using its canonical sets
+      replacement_text += f"$GROUP+ {prefix} {j_name}{canonical_sets} 'Additive adjustment term in equations for {var}';"
+      # Apply the adjustment term using the specific sets found in the equation (var_sets)
+      # \g<0> in the replacement string refers to the entire matched text (var[sets])
+      add_repl = rf"(\g<0> + {j_name}{var_sets})"
+      LHS = pattern.sub(add_repl, LHS)
+      RHS = pattern.sub(add_repl, RHS)
     
-    return RHS, replacement_text
+    return LHS, RHS, replacement_text
 
   def block_define(self, match, text):
     """
@@ -677,7 +698,7 @@ class Precompiler:
         replacement_text += f"$GROUP+ {group_name} {var}{sets}{merged_conditions};"
         eq_name = self.generate_equation_name(eq_name, var, sets, suffix[1:])
 
-      RHS, replacement_text = self.add_adjustment_terms(eq_name, var, var_sets, RHS, replacement_text)
+      LHS, RHS, replacement_text = self.add_adjustment_terms(eq_name, var, var_sets, LHS, RHS, replacement_text)
     
       eq = Equation(eq_name, sets, merged_conditions, LHS, RHS)
       self.blocks[model_name][eq.name] = eq
