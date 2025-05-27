@@ -1,6 +1,6 @@
 import os
 
-import gams
+import gams.transfer as gt
 
 from .gams_pandas import GamsPandasDatabase, logger
 
@@ -14,11 +14,9 @@ class Gdx(GamsPandasDatabase):
     if not os.path.splitext(file_path)[1]:
       file_path = file_path + ".gdx"
     self.abs_path = os.path.abspath(file_path)
-    logger.info(f"Open GDX file from {self.abs_path}.")
-    if workspace is None:
-      workspace = gams.GamsWorkspace()
-    database = workspace.add_database_from_gdx(self.abs_path)
-    super().__init__(database, sparse=sparse)
+    container=gt.Container()
+    container.read(self.abs_path)
+    super().__init__(container, sparse=sparse)
 
   def export(self, path=None, relative_path=True):
     """

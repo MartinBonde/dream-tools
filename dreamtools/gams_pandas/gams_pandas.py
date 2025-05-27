@@ -1,17 +1,14 @@
 """
 """
 import os
-
 import numpy as np
 import pandas as pd
-import gams
 import logging
 import builtins
-import time
 from copy import deepcopy
-from .utility import index_from_symbol, symbol_is_scalar, is_iterable, map_lowest_level, index_names_from_symbol, \
-  all_na, map_to_int_where_possible
-import gams.core.numpy
+import gams.transfer as gt
+from .utility import domains_as_strings,index_from_symbol, symbol_is_scalar, is_iterable, index_names_from_symbol, \
+  all_na, map_to_int_where_possible,safe_set_records
 
 logger = logging.getLogger(__name__)
 
@@ -22,18 +19,20 @@ class GamsPandasDatabase:
   Changes to retrieved series are written to the GAMS database on export.
   """
 
-  def __init__(self, database=None, workspace=None, auto_sort_index=True, sparse=True, reference_database=None):
-    if database is None:
-      if workspace is None:
-        workspace = gams.GamsWorkspace()
-      database = workspace.add_database()
-    self.database = database
-    self.gams2numpy = gams.core.numpy.Gams2Numpy(database.workspace.system_directory)
+  def __init__(self, container=None, workspace=None, auto_sort_index=True, sparse=True, reference_database=None):
+    if container is None:
+      self.container=gt.Container()
+    else:
+      self.container=container
     self.auto_sort_index = auto_sort_index
     self.sparse = sparse
     self.reference_database = reference_database
     self.series = {}
-
+    '''
+    When modfying a symbol in a series or dataframe, we need to rewrite those changes to the GAMS-objects in the container.
+    To do this efficiently, we add symbols to _modified_symbols, and commit_changes to the relevant symbols when calling export.
+    '''
+    self._modified_symbols=set()
   def __getattr__(self, item):
     try:
       return self[item]
@@ -43,10 +42,9 @@ class GamsPandasDatabase:
   def copy(self):
     obj = type(self).__new__(self.__class__)
     obj.__dict__.update(self.__dict__)
-    obj.database = self.database.workspace.add_database(source_database=self.database)
     obj.series = deepcopy(self.series)
     return obj
-
+    
   def merge(self, other, symbol_names=None, inplace=False):
     """
     Merge two GamsPandasDatabases.
@@ -74,32 +72,32 @@ class GamsPandasDatabase:
         db.add_parameter_from_series(other[name], other[name].explanatory_text)
 
     return db
-
+  
   @property
   def symbols(self):
     """Dictionary of all symbols in the underlying GAMS database"""
-    return {symbol.name: symbol for symbol in self.database}
+    return{symbol.name: symbol for symbol in self.container.getSymbols()}
 
   @property
   def sets(self):
     """Dictionary of all sets in the underlying GAMS database"""
-    return {symbol.name: symbol for symbol in self.database if isinstance(symbol, gams.GamsSet)}
+    return {symbol.name: symbol for symbol in self.container.getSets()}
 
   @property
   def variables(self):
     """Dictionary of all variables in the underlying GAMS database"""
-    return {symbol.name: symbol for symbol in self.database if isinstance(symbol, gams.GamsVariable)}
+    return {symbol.name: symbol for symbol in self.container.getVariables()}
 
   @property
   def parameters(self):
     """Dictionary of all parameters in the underlying GAMS database"""
-    return {symbol.name: symbol for symbol in self.database if isinstance(symbol, gams.GamsParameter)}
+    return {symbol.name: symbol for symbol in self.getParameters()}
 
   @property
   def equations(self):
     """Dictionary of all equations in the underlying GAMS database"""
-    return {symbol.name: symbol for symbol in self.database if isinstance(symbol, gams.GamsEquation)}
-
+    return {symbol.name: symbol for symbol in self.getEquations()}
+  
   def add_to_builtins(self, *args):
     """Retrieve any number symbol names from the database and add their Pandas representations to the global namespace."""
     for identifier in args:
@@ -116,13 +114,13 @@ class GamsPandasDatabase:
     """Add parameter symbol to database based on a Pandas DataFrame."""
     domains = list(df.columns[:value_column_index:])
     for d in domains:
-      if d not in self:
+      if not d in self.sets and d!='*':
         if add_missing_domains:
-          self.create_set(name=d, index=df[d].unique(), explanatory_text="")
+          self.create_set(name=d, index=df[d].unique(), explanatory_text="") #only add sets/records if they do not exist
         else:
           raise KeyError(
             f"'{d}' is not a set in the database. Enable add_missing_domains or add the set to the database manually.")
-    self.database.add_parameter_dc(identifier, domains, explanatory_text)
+    gt.Parameter(self.container,name=identifier,domain=domains,description=explanatory_text,records=df.values.tolist())
     if domains:
       series = df.set_index(domains).iloc[:, 0]
     else:
@@ -142,13 +140,14 @@ class GamsPandasDatabase:
     """Add variable symbol to database based on a Pandas DataFrame."""
     domains = list(df.columns[:value_column_index:])
     for d in domains:
-      if d not in self:
+      if not d in self.sets and d!='*':
         if add_missing_domains:
-          self.create_set(name=d, index=df[d].unique(), explanatory_text="")
+          self.create_set(name=d, index=df[d].unique(), explanatory_text="") #Only add sets/records if they do not exist
         else:
           raise KeyError(
             f"'{d}' is not a set in the database. Enable add_missing_domains or add the set to the database manually.")
-    self.database.add_variable_dc(identifier, gams.VarType.Free, domains, explanatory_text)
+    df.rename(columns={df.columns[value_column_index]: "level"}, inplace=True)
+    gt.Variable(self.container,name=identifier,domain=domains,description=explanatory_text,records=df)
     if domains:
       series = df.set_index(domains).iloc[:, 0]
     else:
@@ -170,11 +169,18 @@ class GamsPandasDatabase:
       return self[x]
     elif len(x) and isinstance(x[0], (pd.Index, tuple, list)):
       multi_index = pd.MultiIndex.from_product(x)
-      multi_index.names = [getattr(i, "name", None) for i in x]
+      multi_index.names = [getattr(i, "names", None) for i in x]
       return multi_index
     else:
-      return pd.Index(x)
+      return pd.Index(x)    
 
+  def add_set_dc(self,identifier,domains,explanatory_text=""):
+    '''reconstructed, mainly for copying sets already in the database to a new GAMS-symbol'''
+    records=self.series[identifier]
+    records.names=domains
+    self.create_set(identifier,records,explanatory_text)
+    pass
+    
   def create_set(self, name, index, explanatory_text="", texts=None, domains=None):
     """
     Add a new GAMS Set to the database and return an Pandas representation of the Set.
@@ -206,8 +212,10 @@ class GamsPandasDatabase:
     index.domains = domains
     index.names = domains
     index.name = name
-
-    self.database.add_set_dc(index.name, domains, explanatory_text)
+    for d in domains:
+      if not d in self.sets and d!='*':
+        gt.Set(self.container,name=d,domain='*',records=list(index.get_level_values(d).unique())) 
+    gt.Set(self.container,name=index.name,domain=domains,description=explanatory_text,records=list(index.unique()))
     self.series[index.name] = index
     return self[name]
 
@@ -226,16 +234,18 @@ class GamsPandasDatabase:
       elif is_iterable(data):
         getattr(self, f"add_{symbol_type}_from_dataframe")(name, pd.DataFrame(data), explanatory_text, add_missing_domains)
       else:
-        self.__add_variable_or_parameter_to_database(symbol_type, name, 0, explanatory_text)
-        self[name] = data
+        if symbol_type=='parameter':
+          self.container.addParameter(name,records=[data])
+        elif symbol_type=='variable':
+          self.container.addVariable(name, records=[{"level": data}])
     return self[name]
 
   def __add_variable_or_parameter_to_database(self, symbol_type, name, dim, explanatory_text):
     assert symbol_type in ["parameter", "variable"]
     if symbol_type == "parameter":
-      self.database.add_parameter(name, dim, explanatory_text)
-    elif symbol_type == "variable":
-      self.database.add_variable(name, dim, gams.VarType.Free, explanatory_text)
+      self.container.addParameter(name,dim,explanatory_text)
+    elif symbol_type == "variable":      
+      self.container.addVariable(name,dim,explanatory_text)
 
   def create_variable(self, name, index=None, explanatory_text="", data=None, dtype=None, copy=False, add_missing_domains=False):
     return self.__create_variable_or_parameter("variable", name, index, explanatory_text, data, dtype, copy, add_missing_domains)
@@ -265,19 +275,11 @@ class GamsPandasDatabase:
     except TypeError:
       pass
     return t
-
+  
   def series_from_symbol(self, symbol, sparse, attributes, attribute):
     index_names = index_names_from_symbol(symbol)
-    try:
-      df = pd.DataFrame(
-        self.gams2numpy.gmdReadSymbolStr(self.database, symbol.name),
-        columns=[*index_names, *attributes],
-      )
-    except:  # In case gams2numpy breaks, try using the regular API
-      df = pd.DataFrame(
-        [[*rec.keys, getattr(rec, attribute)] for rec in list(symbol)],
-        columns=[*index_names, attribute],
-      )
+    df=self.container[symbol.name].records
+    self._modified_symbols.add(symbol.name)
     for i in index_names:
       df[i] = map_to_int_where_possible(df[i])
     df.set_index(index_names, inplace=True)
@@ -302,7 +304,7 @@ class GamsPandasDatabase:
 
   def series_from_parameter(self, symbol, sparse):
     return self.series_from_symbol(symbol, sparse, attributes=["value"], attribute="value")
-
+  
   def getitem(self, item, sparse=None):
     if sparse is None:
       sparse = self.sparse
@@ -311,34 +313,41 @@ class GamsPandasDatabase:
       if item in self.symbols:
         symbol = self.symbols[item]
       else:
-        symbol = self.database.get_symbol(item)
-
-      if isinstance(symbol, gams.GamsSet):
+        symbol=self.container.getSymbols(item)
+      if isinstance(symbol, gt.Set):
         self.series[item] = index_from_symbol(symbol)
-
-      elif isinstance(symbol, gams.GamsVariable):
+        '''This feels ok. It solves the issue of when calling a gams-object to series, we want sets to have their domains as names, but variables and parametres indexed by sets
+        should have the set's actual names as index-names. This makes it so that when a set is defined on another set, it will always be indexed by that set, and just have its own name otherwise.
+        The upside here is that when calling a set to series, the domain-information - if there is any, is preserved in the name of the series.
+        It will however also be the case that when we define a variable or parameter on a set with a domain, that the domain will be the index header.
+        This is probably fine, the information being written to GAMS is the same and I don't really seee a serious information loss...
+        '''
+        if not self.container[symbol.name].domain==['*']:
+          self.series[item].names=domains_as_strings(self.container[symbol.name])
+      elif isinstance(symbol, gt.Variable):
         if symbol_is_scalar(symbol):
-          self.series[item] = symbol.find_record().level if len(symbol) else None
+          val = self.container[symbol.name].records['level'].iloc[0]
+          self.series[item] = val
         else:
           self.series[item] = self.series_from_variable(symbol, sparse)
           if self.auto_sort_index:
             self.series[item] = self.series[item].sort_index()
-
-      elif isinstance(symbol, gams.GamsParameter):
+      elif isinstance(symbol, gt.Parameter):
         if symbol_is_scalar(symbol):
-          self.series[item] = symbol.find_record().value if len(symbol) else None
+          val = self.container[symbol.name].records['value'].iloc[0]
+          self.series[item] = val
         else:
           self.series[item] = self.series_from_parameter(symbol, sparse)
           if self.auto_sort_index:
             self.series[item] = self.series[item].sort_index()
 
-      elif isinstance(symbol, gams.GamsEquation):
+      elif isinstance(symbol, gt.Equation):
         return symbol
     return self.series[item]
-
+  
   def __getitem__(self, item):
     return self.getitem(item)
-
+  
   def __setitem__(self, name, value):
     if name in self.symbols:
       if not is_iterable(value) and is_iterable(self[name]):  # If assigning a scalar to all records in a series
@@ -346,8 +355,7 @@ class GamsPandasDatabase:
       self.set_symbol_records(self.symbols[name], value)
       self.series[name] = value
     else:
-      if not value.name:
-        value.name = name
+      value.name = name
       self.series[name] = value
 
   def items(self):
@@ -365,45 +373,89 @@ class GamsPandasDatabase:
       series_names = self.series.keys()
     for symbol_name in series_names:
       self.set_symbol_records(self.symbols[symbol_name], self.series[symbol_name])
+  
+  def commit_changes(self):
+    '''a method to commit changes to pandas objects to the GAMS-object they represent. This is called on export'''
+    for symbol_name in self._modified_symbols:
+        series = self.series[symbol_name]
+        gams_symbol = self.container[symbol_name]
+        records_df = gams_symbol.records
+
+        # Convert Index to Series if necessary
+        if isinstance(series, pd.Index):
+            series = pd.Series([None] * len(series), index=series)
+
+        # Determine value column
+        value_col = next((c for c in ['text', 'value', 'level'] if c in records_df.columns), None)
+
+        new_records = []
+
+        for index, val in series.items():
+            if not isinstance(index, tuple):
+                index = (index,)
+            keys = tuple(str(k) for k in index)
+
+            # Construct dict for each record
+            rec = {f"dim{i+1}": key for i, key in enumerate(keys)}
+            if value_col:
+                rec[value_col] = val
+            new_records.append(rec)
+
+        #replace records
+        gams_symbol.setRecords(new_records)
+
+    self._modified_symbols.clear()
 
   def export(self, path):
-    """Save changes to database and export database to GDX file."""
-    self.save_series_to_database()
-    for i in range(1, 10):
-      try:
-        self.database.export(os.path.abspath(path))
-        break
-      except gams.workspace.GamsException:
-        time.sleep(i)
-    else:
-      self.database.export(os.path.abspath(path))
+    self.commit_changes()
+    self.container.write(os.path.abspath(path))
 
   def set_parameter_records(self, symbol, value):
-    symbol.clear()
     if all_na(value): pass
     elif symbol_is_scalar(symbol):
-      symbol.add_record().value = value
-    elif list(value.keys()) == [0]:  # If singleton series
-      symbol.add_record().value = value[0]
+      symbol.records=pd.DataFrame([{'value':value}])
     else:
-      for k, v in value.items():
-        symbol.add_record(map_lowest_level(str, k)).value = v
-    # else:
-    #   df = value.reset_index()
-    #   df[value.index.names] = df[value.index.names].astype(str)
-    #   self.gams2numpy.gmdFillSymbolStr(self.database, symbol, df.to_numpy())
+      # Non-scalar: ensure correct structure
+      if isinstance(value, pd.Series):
+          value=value.reset_index(name='value')
+      elif isinstance(value, pd.DataFrame):
+          if "value" not in value.columns:
+              raise ValueError(f"DataFrame must contain 'value' column when setting parameter '{symbol.name}'")
+          value = value.reset_index()
+      else:
+          raise TypeError(f"Unsupported type for setting parameter '{symbol.name}': {type(value)}")
+      # Coerce categories to string
+      for dom_col in [d.name for d in symbol.domain if hasattr(d,'name')]:
+          if value[dom_col].dtype.name != "category":
+              value[dom_col] = value[dom_col].astype("category")
+          # Coerce categories to string
+          value[dom_col] = value[dom_col].cat.rename_categories(lambda x: str(x))
+      symbol.setRecords(value)
 
   @staticmethod
   def set_variable_records(symbol, value):
-    symbol.clear()
     if all_na(value): pass
     elif symbol_is_scalar(symbol):
-      symbol.add_record().level = value
-    elif list(value.keys()) == [0]:  # If singleton series
-      symbol.add_record().level = value[0]
+      symbol.records=pd.DataFrame([{'level':value,'marginal':np.nan,'lower':np.nan,'upper':np.nan,'scale':np.nan}])
     else:
-      for k, v in value.items():
-        symbol.add_record(map_lowest_level(str, k)).level = v
+        # Non-scalar: ensure correct structure
+      if isinstance(value, pd.Series):
+          value=value.reset_index(name='level')
+      elif isinstance(value, pd.DataFrame):
+          if "level" not in value.columns:
+              raise ValueError(f"DataFrame must contain 'level' column when setting variable '{symbol.name}'")
+          value = value.reset_index()
+      else:
+          raise TypeError(f"Unsupported type for setting variable '{symbol.name}': {type(value)}")
+      for attr in ['marginal', 'lower', 'upper', 'scale']:
+        if attr not in value.columns:
+          value[attr] = np.nan
+      for dom_col in [d.name for d in symbol.domain if hasattr(d,'name')]:
+          if value[dom_col].dtype.name != "category":
+              value[dom_col] = value[dom_col].astype("category")
+          # Coerce categories to string
+          value[dom_col] = value[dom_col].cat.rename_categories(lambda x: str(x))
+      safe_set_records(symbol,value)
 
   @staticmethod
   def set_set_records(symbol, value):
@@ -411,23 +463,22 @@ class GamsPandasDatabase:
       texts = getattr(value, "texts", None)
       value = texts if texts is not None else pd.Series(map(str, value), index=value)
 
-    symbol.clear()
     if all_na(value): pass
     elif symbol_is_scalar(symbol):
-      symbol.add_record().text = str(value)
+      symbol.setRecords(value)
     elif list(value.keys()) == [0]:  # If singleton series
-      symbol.add_record().text = value[0]
+      symbol.setRecords(value)
     else:
       for k, v in value.items():
-        symbol.add_record(map_lowest_level(str, k)).text = v
-
+        symbol.setRecords(str(k),v)
+  
   def set_symbol_records(self, symbol, value):
     """Convert Pandas series to records in a GAMS Symbol"""
-    if isinstance(symbol, gams.GamsSet):
+    if isinstance(symbol,gt.Set):
       self.set_set_records(symbol, value)
-    elif isinstance(symbol, gams.GamsVariable):
+    elif isinstance(symbol,gt.Variable):
       self.set_variable_records(symbol, value)
-    elif isinstance(symbol, gams.GamsParameter):
+    elif isinstance(symbol,gt.Parameter):
       self.set_parameter_records(symbol, value)
     else:
       TypeError(f"{type(symbol)} is not (yet) supported by gams_pandas")
@@ -446,5 +497,5 @@ class GamsPandasDatabase:
     return (
          item in self.series
       or item in self.symbols
-      or self.database.get_symbol(item) is not None
+      or self.container.get_symbol(item) is not None
     )
