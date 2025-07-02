@@ -168,8 +168,9 @@ class GamsPandasDatabase:
     elif isinstance(x, str):
       return self[x]
     elif len(x) and isinstance(x[0], (pd.Index, tuple, list)):
-      multi_index = pd.MultiIndex.from_product(x)
-      multi_index.names = [getattr(i, "names", None) for i in x]
+      index_parts = [i if isinstance(i, pd.Index) else pd.Index(i) for i in x]
+      names = [i.name if isinstance(i, pd.Index) and i.name is not None else f"dim_{n}" for n, i in enumerate(index_parts)]
+      multi_index = pd.MultiIndex.from_product(index_parts, names=names)
       return multi_index
     else:
       return pd.Index(x)    
@@ -279,6 +280,8 @@ class GamsPandasDatabase:
   def series_from_symbol(self, symbol, sparse, attributes, attribute):
     index_names = index_names_from_symbol(symbol)
     df=self.container[symbol.name].records
+    if df is None:
+      df = pd.DataFrame(columns=index_names + [attribute])
     self._modified_symbols.add(symbol.name)
     for i in index_names:
       df[i] = map_to_int_where_possible(df[i])
