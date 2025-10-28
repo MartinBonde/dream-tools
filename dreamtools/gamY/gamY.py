@@ -783,18 +783,18 @@ class Precompiler:
         item_conditions = self.combine_conditions(item_conditions, f"{con_set}[{def_set}]")
     return item_conditions
 
-  def group_define(self, match, text, sym_type="Variable"):
-    """
-    Parse $GROUP command
-    Syntax example:
-    $GROUP G_newGroup
-      var1[a,t] "label for variable 1"
-      var2[t]   "label for variable 2"
-      var3, var4
-      G_oldGroup
-    ;
-    """
-    group_variable_pattern = re.compile(fr"""
+  def _get_symbol_type_config(self, sym_type):
+    """Get the appropriate groups, conditions, and level suffix for the symbol type."""
+    if sym_type == "Parameter":
+      return self.par_groups, self.par_groups_conditions, ""
+    elif sym_type == "Set":
+      return self.set_groups, self.set_groups_conditions, ""
+    else:
+      return self.groups, self.groups_conditions, ".L"
+
+  def _get_group_variable_pattern(self):
+    """Create the regex pattern for parsing group variable definitions."""
+    return re.compile(fr"""
       (?:^|\,)              #  Check only beginning of line or after a comma.
       \s*                   #  Ignore whitespace
       (\-)?                 #  Optional MINUS character, if group or variable should be removed rather than added ($1)
@@ -809,31 +809,38 @@ class Precompiler:
       (?=[\n\,\;])          #  Variable separator (comma or new line)
     """, re.VERBOSE | re.MULTILINE | re.IGNORECASE)
 
-    if sym_type == "Parameter":
-      GROUPS = self.par_groups
-      CONDITIONS = self.par_groups_conditions
-      L = ""
-    elif sym_type == "Set":
-      GROUPS = self.set_groups
-      CONDITIONS = self.set_groups_conditions
-      L = ""
-    else:
-      GROUPS = self.groups
-      CONDITIONS = self.groups_conditions
-      L = ".L"
+  def _define_new_variables(self, content, group_variable_pattern, GROUPS, sym_type, group_name, match):
+    """First pass: Define any new variables and add them to GROUPS['all'] immediately."""
+    replacement_text = ""
+    
+    for item in group_variable_pattern.finditer(content):
+      remove, name, sets, item_conditions, label, level = item.group(1, 2, 3, 4, 5, 6)
+      
+      # Skip if it's a removal operation or if variable/group already exists
+      if remove or name in GROUPS or name in GROUPS["all"]:
+        continue
+        
+      # Define new variable
+      var = Variable(name, sets, label)  # Variable class is also used for sets and parameters
+      replacement_text += f"{sym_type} {var.name}{var.sets} {var.label} //;\n"
+      if automatic_dummy_suffix and sym_type == "Variable":
+        replacement_text += f"SET {var.name}{automatic_dummy_suffix}{var.sets};\n"
+      
+      # Add to GROUPS["all"] immediately so it can be found in second pass
+      GROUPS["all"][var.name] = var
+      
+      # Warn about missing labels
+      if not label:
+        f = self.error if error_on_missing_label else self.warning
+        f(f"{name} was defined without an explanatory text in {sym_type} group {group_name} (this might be due to a typo).\n{match.groups()}")
+    
+    return replacement_text
 
-    add_to_existing, group_name, content = match.groups()
-    content = self.remove_comments(content)
-    if add_to_existing:
-      content  = group_name + ", " + content
-      replacement_text = "$offlisting\n"
-    else:
-      replacement_text = f"# ----- gamY: Initialize {group_name} group -----\n$offlisting\n"
-
-    new_group = Group()
-    new_group_conditions = CaseInsensitiveDict()
-
-    #  Loop over variables and groups to be added or removed from group
+  def _process_group_membership(self, content, group_variable_pattern, GROUPS, CONDITIONS, 
+                               new_group, new_group_conditions, sym_type, group_name):
+    """Second pass: Process group membership and conditions for all variables."""
+    replacement_text = ""
+    
     for item in group_variable_pattern.finditer(content):
       remove, name, sets, item_conditions, label, level = item.group(1, 2, 3, 4, 5, 6)
 
@@ -846,12 +853,11 @@ class Precompiler:
       elif remove:
         self.error(
           f"{name} is not a {sym_type} or group, and could not be removed from {group_name} (this might be due to a typo).")
-      else:  # Initialize a new variable in a dummy group to loop over.
-        symbols = (Variable(name, sets, label),) # Variable class is also used for sets and parameters
-        old_group_conditions = {}
-        if not label:
-          f = self.error if error_on_missing_label else self.warning
-          f(f"{name} was defined without an explanatory text in {sym_type} group {group_name} (this might be due to a typo).\n{match.groups()}")
+        continue
+      else:
+        # This should not happen after the first pass, but handle it gracefully
+        self.error(f"Unexpected error: {name} not found in groups during second pass processing.")
+        continue
 
       for var in symbols:
         if sets and "$" in sets:
@@ -888,21 +894,62 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
             new_group[var.name] = var, level
 
           new_group_conditions[var.name] = new_conditions
+    
+    return replacement_text
 
+  def _set_variable_levels(self, new_group, new_group_conditions, GROUPS, L):
+    """Set initial levels for variables that have specified values."""
+    replacement_text = ""
+    
     for var, level in new_group.values():
-      # Declare the variables if new
-      if var.name in GROUPS["all"]:
-        new_group[var.name] = GROUPS["all"][var.name]
-      else:
-        replacement_text += f"{sym_type} {var.name}{var.sets} {var.label} //;\n"
-        if automatic_dummy_suffix and sym_type == "Variable":
-          replacement_text += f"SET {var.name}{automatic_dummy_suffix}{var.sets};\n"
-        new_group[var.name] = var
-
+      # Ensure we use the variable from GROUPS["all"] (which has the most up-to-date reference)
+      new_group[var.name] = GROUPS["all"][var.name]
+      
       # Set levels if a value is given
       if level:
         conditions = self.merge_conditions(new_group_conditions[var.name])
         replacement_text += f"{var.name}{L}{var.sets}{conditions} = {level};\n"
+    
+    return replacement_text
+
+  def group_define(self, match, text, sym_type="Variable"):
+    """
+    Parse $GROUP command
+    Syntax example:
+    $GROUP G_newGroup
+      var1[a,t] "label for variable 1"
+      var2[t]   "label for variable 2"
+      var3, var4
+      G_oldGroup
+    ;
+    """
+    group_variable_pattern = self._get_group_variable_pattern()
+    GROUPS, CONDITIONS, L = self._get_symbol_type_config(sym_type)
+
+    add_to_existing, group_name, content = match.groups()
+    content = self.remove_comments(content)
+    if add_to_existing:
+      content  = group_name + ", " + content
+      replacement_text = "$offlisting\n"
+    else:
+      replacement_text = f"# ----- gamY: Initialize {group_name} group -----\n$offlisting\n"
+
+    new_group = Group()
+    new_group_conditions = CaseInsensitiveDict()
+
+    # Phase 1: Define any new variables and add them to GROUPS["all"] immediately
+    replacement_text += self._define_new_variables(
+      content, group_variable_pattern, GROUPS, sym_type, group_name, match
+    )
+
+    # Phase 2: Process group membership and conditions
+    replacement_text += self._process_group_membership(
+      content, group_variable_pattern, GROUPS, CONDITIONS,
+      new_group, new_group_conditions, sym_type, group_name
+    )
+
+    # Phase 3: Set variable levels
+    replacement_text += self._set_variable_levels(new_group, new_group_conditions, GROUPS, L)
 
     replacement_text += "$onlisting\n"
     
