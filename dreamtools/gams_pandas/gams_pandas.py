@@ -28,11 +28,6 @@ class GamsPandasDatabase:
     self.sparse = sparse
     self.reference_database = reference_database
     self.series = {}
-    '''
-    When modfying a symbol in a series or dataframe, we need to rewrite those changes to the GAMS-objects in the container.
-    To do this efficiently, we add symbols to _modified_symbols, and commit_changes to the relevant symbols when calling export.
-    '''
-    self._modified_symbols=set()
   def __getattr__(self, item):
     try:
       return self[item]
@@ -282,7 +277,6 @@ class GamsPandasDatabase:
     df=self.container[symbol.name].records
     if df is None:
       df = pd.DataFrame(columns=index_names + [attribute])
-    self._modified_symbols.add(symbol.name)
     for i in index_names:
       df[i] = map_to_int_where_possible(df[i])
     df.set_index(index_names, inplace=True)
@@ -370,44 +364,39 @@ class GamsPandasDatabase:
   def values(self):
     return self.symbols.values()
 
-  def save_series_to_database(self, series_names=None):
-    """Save Pandas series to GAMS database"""
-    if series_names is None:
-      series_names = self.series.keys()
-    for symbol_name in series_names:
-      self.set_symbol_records(self.symbols[symbol_name], self.series[symbol_name])
-  
-  def commit_changes(self):
-    '''a method to commit changes to pandas objects to the GAMS-object they represent. This is called on export'''
-    for symbol_name in self._modified_symbols:
-        series = self.series[symbol_name]
-        gams_symbol = self.container[symbol_name]
-        records_df = gams_symbol.records
+  def commit_symbol_changes(self, symbol_name):
+    """Commit changes to a pandas object to the GAMS-object it represents"""
+    series = self.series[symbol_name]
+    gams_symbol = self.container[symbol_name]
+    records_df = gams_symbol.records
 
-        # Convert Index to Series if necessary
-        if isinstance(series, pd.Index):
-            series = pd.Series([None] * len(series), index=series)
+    # Convert Index to Series if necessary
+    if isinstance(series, pd.Index):
+      series = pd.Series([None] * len(series), index=series)
 
-        # Determine value column
+    new_records = []
+
+    for index, val in series.items():
+      if not isinstance(index, tuple):
+        index = (index,)
+      keys = tuple(str(k) for k in index)
+
+      # Construct dict for each record
+      rec = {f"dim{i+1}": key for i, key in enumerate(keys)}
+      if records_df is not None:
         value_col = next((c for c in ['text', 'value', 'level'] if c in records_df.columns), None)
+        rec[value_col] = val
+      new_records.append(rec)
 
-        new_records = []
+    #replace records
+    gams_symbol.setRecords(new_records)
 
-        for index, val in series.items():
-            if not isinstance(index, tuple):
-                index = (index,)
-            keys = tuple(str(k) for k in index)
-
-            # Construct dict for each record
-            rec = {f"dim{i+1}": key for i, key in enumerate(keys)}
-            if value_col:
-                rec[value_col] = val
-            new_records.append(rec)
-
-        #replace records
-        gams_symbol.setRecords(new_records)
-
-    self._modified_symbols.clear()
+  def commit_changes(self, symbol_names=None):
+    """Commit changes to pandas objects to the GAMS-object they represent. This is called on export"""
+    if symbol_names is None:
+      symbol_names = self.series.keys()
+    for symbol_name in symbol_names:
+      self.commit_symbol_changes(symbol_name)
 
   def export(self, path):
     self.commit_changes()
