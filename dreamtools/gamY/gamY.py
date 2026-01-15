@@ -549,7 +549,7 @@ class Precompiler:
       if not eq_name:
         eq_name = var
       if sets and not suffix:
-        suffix = "_" + sets[1:-1].replace(",", "_").replace(" ", "")
+        suffix = "_" + sets[1:-1].replace(",", "_").replace(" ", "").replace("'", "").replace('"', "")
         if suffix.endswith("_t"):
           suffix = suffix[:-2]
         if eq_name.endswith(suffix):
@@ -641,6 +641,11 @@ class Precompiler:
     
     return LHS, RHS, replacement_text
 
+  @staticmethod
+  def remove_raw_elements(sets_string):
+    """Remove raw elements from a sets string. E.g. [a,"b",c] -> [a,c]"""
+    return f"[{','.join(set for set in sets_string[1:-1].split(',') if not is_raw_string(set))}]"
+
   def block_define(self, match, text):
     """
     Block command syntax example:
@@ -685,7 +690,7 @@ class Precompiler:
 
       if not sets and var_sets:
         sets = var_sets
-  
+
       if group_name and var is None:
         self.error(f"Variable '{eq_name}' must be defined before being used in a block.")
 
@@ -696,11 +701,11 @@ class Precompiler:
       
       if group_name:
         replacement_text += f"$GROUP+ {group_name} {var}{sets}{merged_conditions};"
-        eq_name = self.generate_equation_name(eq_name, var, sets, suffix[1:])
+        eq_name = self.generate_equation_name(eq_name, var, var_sets, suffix[1:])
 
       LHS, RHS, replacement_text = self.add_adjustment_terms(eq_name, var, var_sets, LHS, RHS, replacement_text)
     
-      eq = Equation(eq_name, sets, merged_conditions, LHS, RHS)
+      eq = Equation(eq_name, self.remove_raw_elements(sets), merged_conditions, LHS, RHS)
       self.blocks[model_name][eq.name] = eq
       replacement_text += f"EQUATION {eq.name}{eq.sets};"
       replacement_text += "\n"+f"{eq.name}{eq.sets}{eq.conditions}.. {eq.LHS} =E= {eq.RHS};"+"\n"
@@ -1412,6 +1417,8 @@ def is_enclosed(expression):
         return False
   return True
 
+def is_raw_string(s):
+  return s.startswith("'") or s.startswith('"')
 
 def find_gams():
     """
