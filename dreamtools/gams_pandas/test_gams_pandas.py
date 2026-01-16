@@ -260,6 +260,24 @@ def test_export_NAs():
   expected = pd.Series([1, 2, np.nan, 4, 5], index=pd.Index([0, 1, 2, 3, 4], name='t'), name="p_nans")
   pd.testing.assert_series_equal(db['p_nans'], expected)
 
+def test_parameter_with_universal_set():
+  db = dt.GamsPandasDatabase()
+  db.container.addParameter("test_param", domain=["*"], records=[["a", 1], ["b", 2], ["c", 3]])
+  param = db["test_param"]
+  assert len(param) == 3
+  assert param["a"] == 1
+  assert param["b"] == 2
+  assert param["c"] == 3
+  assert param.name == "test_param"
+  
+  # Test with variable as well
+  var_df = pd.DataFrame([["x", 10], ["y", 20]], columns=["uni", "level"])
+  db.container.addVariable("test_var", domain=["*"], records=var_df)
+  var = db["test_var"]
+  assert len(var) == 2
+  assert var["x"] == 10
+  assert var["y"] == 20
+
 def test_detuple():
   assert dt.GamsPandasDatabase.detuple("aaa") == "aaa"
   assert dt.GamsPandasDatabase.detuple(("aaa",)) == "aaa"

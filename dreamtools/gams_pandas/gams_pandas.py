@@ -277,9 +277,11 @@ class GamsPandasDatabase:
     df=self.container[symbol.name].records
     if df is None:
       df = pd.DataFrame(columns=index_names + [attribute])
-    for i in index_names:
+    domain_labels = symbol.domain_labels
+    for i in domain_labels:
       df[i] = map_to_int_where_possible(df[i])
-    df.set_index(index_names, inplace=True)
+    df.set_index(domain_labels, inplace=True)
+    df.index.names = index_names
     if sparse:
       if len(df) == 0:
         df.index = self.get_index([self[i] for i in index_names])[[]]  # Get the correct data types and size of index
