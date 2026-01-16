@@ -1,7 +1,9 @@
 import os
 import sys
-# os.chdir("..")
-sys.path.insert(0, os.getcwd())
+from pathlib import Path
+
+# Ensure we test the *local* checkout (repo root), not a shared drive / site-packages install.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import pytest
 import numpy as np
@@ -179,7 +181,7 @@ def test_export_with_no_changes():
   def normalize(df):
       # Convert all categorical columns to strings to avoid category order issues
       for col in df.columns:
-          if pd.api.types.is_categorical_dtype(df[col]):
+          if isinstance(df[col].dtype, pd.CategoricalDtype):
               df[col] = df[col].astype(str)
       return df
 
@@ -255,7 +257,7 @@ def test_export_NAs():
   db.export("test_export.gdx")
   db = dt.Gdx("test_export.gdx")
   assert all(pd.isna(db["p"]))
-  expected = pd.Series([1, 2, np.nan, 4, 5], index=pd.Index(['0.0','1.0','2.0','3.0','4.0'],name='t'), name="p_nans")
+  expected = pd.Series([1, 2, np.nan, 4, 5], index=pd.Index([0, 1, 2, 3, 4], name='t'), name="p_nans")
   pd.testing.assert_series_equal(db['p_nans'], expected)
 
 def test_detuple():
