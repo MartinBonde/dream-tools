@@ -278,13 +278,16 @@ class GamsPandasDatabase:
     if df is None:
       df = pd.DataFrame(columns=index_names + [attribute])
     domain_labels = symbol.domain_labels
-    for i in domain_labels:
-      df[i] = map_to_int_where_possible(df[i])
-    df.set_index(domain_labels, inplace=True)
-    df.index.names = index_names
+    if domain_labels is None:
+      domain_labels = domains_as_strings(symbol)
+    if domain_labels:
+      for i in domain_labels:
+        df[i] = map_to_int_where_possible(df[i])
+      df.set_index(domain_labels, inplace=True)
+      df.index.names = index_names
     if sparse:
-      if len(df) == 0:
-        df.index = self.get_index([self[i] for i in index_names])[[]]  # Get the correct data types and size of index
+      if len(df) == 0 and index_names:
+        df.index = self.get_index([self[i] for i in index_names])[[]]
       series = df[attribute].astype(float)
     else:
       assert all([i in self for i in index_names]), "Cannot get dense representation of series if sets are not included in database."

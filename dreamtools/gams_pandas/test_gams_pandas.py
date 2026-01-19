@@ -404,3 +404,29 @@ def test_subset_arithmetic():
   assert all(db['multiply_test'] == 6)
   assert all(db['add_testvar'] == 5)
   assert all(db['multiply_testvar'] == 6)
+
+def test_read_variable_with_zero_records():
+  db = dt.GamsPandasDatabase()
+  
+  t = db.create_set("t", range(2025, 2030), "Time periods")
+  s = db.create_set("s", ["goods", "services"], "Sectors")
+  
+  # Create an indexed variable without any records (this is where the bug occurs)
+  db.container.addVariable("empty_indexed_var", domain=["t", "s"], records=None)
+  
+  # Also test with parameter
+  db.container.addParameter("empty_indexed_param", domain=["t", "s"], records=None)
+  
+  db.export("test_export.gdx")
+  
+  db_read = dt.Gdx("test_export.gdx")
+  
+  # This should not raise an error when reading an indexed variable with zero records (sparse mode)
+  result_var_sparse = db_read.getitem("empty_indexed_var", sparse=True)
+  assert len(result_var_sparse) == 0
+  assert result_var_sparse.name == "empty_indexed_var"
+  
+  # This should also work for parameters
+  result_param_sparse = db_read.getitem("empty_indexed_param", sparse=True)
+  assert len(result_param_sparse) == 0
+  assert result_param_sparse.name == "empty_indexed_param"
