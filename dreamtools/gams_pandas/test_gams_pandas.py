@@ -1,7 +1,9 @@
 import os
 import sys
-# os.chdir("..")
-sys.path.insert(0, os.getcwd())
+from pathlib import Path
+
+# Ensure we test the *local* checkout (repo root), not a shared drive / site-packages install.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import pytest
 import numpy as np
@@ -179,7 +181,7 @@ def test_export_with_no_changes():
   def normalize(df):
       # Convert all categorical columns to strings to avoid category order issues
       for col in df.columns:
-          if pd.api.types.is_categorical_dtype(df[col]):
+          if isinstance(df[col].dtype, pd.CategoricalDtype):
               df[col] = df[col].astype(str)
       return df
 
@@ -255,8 +257,26 @@ def test_export_NAs():
   db.export("test_export.gdx")
   db = dt.Gdx("test_export.gdx")
   assert all(pd.isna(db["p"]))
-  expected = pd.Series([1, 2, np.nan, 4, 5], index=pd.Index(['0.0','1.0','2.0','3.0','4.0'],name='t'), name="p_nans")
+  expected = pd.Series([1, 2, np.nan, 4, 5], index=pd.Index([0, 1, 2, 3, 4], name='t'), name="p_nans")
   pd.testing.assert_series_equal(db['p_nans'], expected)
+
+def test_parameter_with_universal_set():
+  db = dt.GamsPandasDatabase()
+  db.container.addParameter("test_param", domain=["*"], records=[["a", 1], ["b", 2], ["c", 3]])
+  param = db["test_param"]
+  assert len(param) == 3
+  assert param["a"] == 1
+  assert param["b"] == 2
+  assert param["c"] == 3
+  assert param.name == "test_param"
+  
+  # Test with variable as well
+  var_df = pd.DataFrame([["x", 10], ["y", 20]], columns=["uni", "level"])
+  db.container.addVariable("test_var", domain=["*"], records=var_df)
+  var = db["test_var"]
+  assert len(var) == 2
+  assert var["x"] == 10
+  assert var["y"] == 20
 
 def test_detuple():
   assert dt.GamsPandasDatabase.detuple("aaa") == "aaa"
@@ -384,3 +404,29 @@ def test_subset_arithmetic():
   assert all(db['multiply_test'] == 6)
   assert all(db['add_testvar'] == 5)
   assert all(db['multiply_testvar'] == 6)
+
+def test_read_variable_with_zero_records():
+  db = dt.GamsPandasDatabase()
+  
+  t = db.create_set("t", range(2025, 2030), "Time periods")
+  s = db.create_set("s", ["goods", "services"], "Sectors")
+  
+  # Create an indexed variable without any records (this is where the bug occurs)
+  db.container.addVariable("empty_indexed_var", domain=["t", "s"], records=None)
+  
+  # Also test with parameter
+  db.container.addParameter("empty_indexed_param", domain=["t", "s"], records=None)
+  
+  db.export("test_export.gdx")
+  
+  db_read = dt.Gdx("test_export.gdx")
+  
+  # This should not raise an error when reading an indexed variable with zero records (sparse mode)
+  result_var_sparse = db_read.getitem("empty_indexed_var", sparse=True)
+  assert len(result_var_sparse) == 0
+  assert result_var_sparse.name == "empty_indexed_var"
+  
+  # This should also work for parameters
+  result_param_sparse = db_read.getitem("empty_indexed_param", sparse=True)
+  assert len(result_param_sparse) == 0
+  assert result_param_sparse.name == "empty_indexed_param"

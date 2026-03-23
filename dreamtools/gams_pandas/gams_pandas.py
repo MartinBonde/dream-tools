@@ -28,11 +28,7 @@ class GamsPandasDatabase:
     self.sparse = sparse
     self.reference_database = reference_database
     self.series = {}
-    '''
-    When modfying a symbol in a series or dataframe, we need to rewrite those changes to the GAMS-objects in the container.
-    To do this efficiently, we add symbols to _modified_symbols, and commit_changes to the relevant symbols when calling export.
-    '''
-    self._modified_symbols=set()
+
   def __getattr__(self, item):
     try:
       return self[item]
@@ -177,10 +173,9 @@ class GamsPandasDatabase:
 
   def add_set_dc(self,identifier,domains,explanatory_text=""):
     '''reconstructed, mainly for copying sets already in the database to a new GAMS-symbol'''
-    records=self.series[identifier]
+    records=self.series[identifier].copy()
     records.names=domains
     self.create_set(identifier,records,explanatory_text)
-    pass
     
   def create_set(self, name, index, explanatory_text="", texts=None, domains=None):
     """
@@ -282,13 +277,17 @@ class GamsPandasDatabase:
     df=self.container[symbol.name].records
     if df is None:
       df = pd.DataFrame(columns=index_names + [attribute])
-    self._modified_symbols.add(symbol.name)
-    for i in index_names:
-      df[i] = map_to_int_where_possible(df[i])
-    df.set_index(index_names, inplace=True)
+    domain_labels = symbol.domain_labels
+    if domain_labels is None:
+      domain_labels = domains_as_strings(symbol)
+    if domain_labels:
+      for i in domain_labels:
+        df[i] = map_to_int_where_possible(df[i])
+      df.set_index(domain_labels, inplace=True)
+      df.index.names = index_names
     if sparse:
-      if len(df) == 0:
-        df.index = self.get_index([self[i] for i in index_names])[[]]  # Get the correct data types and size of index
+      if len(df) == 0 and index_names:
+        df.index = self.get_index([self[i] for i in index_names])[[]]
       series = df[attribute].astype(float)
     else:
       assert all([i in self for i in index_names]), "Cannot get dense representation of series if sets are not included in database."
@@ -370,44 +369,12 @@ class GamsPandasDatabase:
   def values(self):
     return self.symbols.values()
 
-  def save_series_to_database(self, series_names=None):
-    """Save Pandas series to GAMS database"""
-    if series_names is None:
-      series_names = self.series.keys()
-    for symbol_name in series_names:
-      self.set_symbol_records(self.symbols[symbol_name], self.series[symbol_name])
-  
-  def commit_changes(self):
-    '''a method to commit changes to pandas objects to the GAMS-object they represent. This is called on export'''
-    for symbol_name in self._modified_symbols:
-        series = self.series[symbol_name]
-        gams_symbol = self.container[symbol_name]
-        records_df = gams_symbol.records
-
-        # Convert Index to Series if necessary
-        if isinstance(series, pd.Index):
-            series = pd.Series([None] * len(series), index=series)
-
-        # Determine value column
-        value_col = next((c for c in ['text', 'value', 'level'] if c in records_df.columns), None)
-
-        new_records = []
-
-        for index, val in series.items():
-            if not isinstance(index, tuple):
-                index = (index,)
-            keys = tuple(str(k) for k in index)
-
-            # Construct dict for each record
-            rec = {f"dim{i+1}": key for i, key in enumerate(keys)}
-            if value_col:
-                rec[value_col] = val
-            new_records.append(rec)
-
-        #replace records
-        gams_symbol.setRecords(new_records)
-
-    self._modified_symbols.clear()
+  def commit_changes(self, symbol_names=None):
+    """Commit changes to pandas objects to the GAMS-object they represent. This is called on export"""
+    if symbol_names is None:
+      symbol_names = self.series.keys()
+    for symbol_name in symbol_names:
+      self.set_symbol_records(self.container[symbol_name], self.series[symbol_name])
 
   def export(self, path):
     self.commit_changes()
@@ -466,14 +433,29 @@ class GamsPandasDatabase:
       texts = getattr(value, "texts", None)
       value = texts if texts is not None else pd.Series(map(str, value), index=value)
 
-    if all_na(value): pass
+    if all_na(value): 
+      pass
     elif symbol_is_scalar(symbol):
       symbol.setRecords(value)
-    elif list(value.keys()) == [0]:  # If singleton series
-      symbol.setRecords(value)
     else:
-      for k, v in value.items():
-        symbol.setRecords(str(k),v)
+      if isinstance(value, pd.Series):
+        records_data = []
+        for idx, txt in value.items():
+          if isinstance(idx, tuple):
+            record = {symbol.domain_labels[i]: str(val) for i, val in enumerate(idx)}
+          else:
+            record = {symbol.domain_labels[0]: str(idx)}
+          record['element_text'] = str(txt) if pd.notna(txt) else ''
+          records_data.append(record)
+        
+        if records_data:
+          records_df = pd.DataFrame(records_data)
+          for dom_col in symbol.domain_labels:
+            if dom_col in records_df.columns:
+              records_df[dom_col] = records_df[dom_col].astype('category')
+          symbol.setRecords(records_df)
+      else:
+        symbol.setRecords(value)
   
   def set_symbol_records(self, symbol, value):
     """Convert Pandas series to records in a GAMS Symbol"""
@@ -500,5 +482,5 @@ class GamsPandasDatabase:
     return (
          item in self.series
       or item in self.symbols
-      or self.container.get_symbol(item) is not None
+      or item in self.container
     )
