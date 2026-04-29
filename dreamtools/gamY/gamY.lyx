@@ -1,5 +1,5 @@
-#LyX 2.3 created this file. For more info see http://www.lyx.org/
-\lyxformat 544
+#LyX 2.4 created this file. For more info see https://www.lyx.org/
+\lyxformat 620
 \begin_document
 \begin_header
 \save_transient_properties true
@@ -46,11 +46,11 @@ eqs-within-sections
 figs-within-sections
 enumitem
 \end_modules
-\maintain_unincluded_children false
+\maintain_unincluded_children no
 \language american
 \language_package default
-\inputencoding auto
-\fontencoding global
+\inputencoding auto-legacy
+\fontencoding auto
 \font_roman "default" "default"
 \font_sans "berasans" "Arial"
 \font_typewriter "beramono" "default"
@@ -58,7 +58,9 @@ enumitem
 \font_default_family sfdefault
 \use_non_tex_fonts false
 \font_sc false
-\font_osf false
+\font_roman_osf false
+\font_sans_osf false
+\font_typewriter_osf false
 \font_sf_scale 100 100
 \font_tt_scale 100 100
 \use_microtype false
@@ -102,7 +104,9 @@ enumitem
 \suppress_date false
 \justification true
 \use_refstyle 1
+\use_formatted_ref 0
 \use_minted 0
+\use_lineno 0
 \index Index
 \shortcut idx
 \color #008000
@@ -118,11 +122,16 @@ enumitem
 \papercolumns 1
 \papersides 1
 \paperpagestyle default
+\tablestyle default
 \tracking_changes false
 \output_changes false
+\change_bars false
+\postpone_fragile_content false
 \html_math_output 0
 \html_css_as_file 0
 \html_be_strict false
+\docbook_table_output 0
+\docbook_mathml_prefix 1
 \end_header
 
 \begin_body
@@ -132,15 +141,11 @@ gamY - Documentation
 \end_layout
 
 \begin_layout Author
-
-\lang danish
 Martin Kirk Bonde
 \end_layout
 
 \begin_layout Date
-
-\lang danish
-January 2022
+May 2026
 \end_layout
 
 \begin_layout Standard
@@ -167,8 +172,7 @@ Introduction
 \end_layout
 
 \begin_layout Plain Layout
-gamY is a pre-processor for GAMS and implements additional features that
- are convenient for working with large models.
+gamY is a pre-processor for GAMS and implements additional features that are convenient for working with large models.
  The documentation assumes basic familiarity with GAMS.
 \end_layout
 
@@ -209,10 +213,11 @@ gamY requires an installation of GAMS to be useful.
 \end_layout
 
 \begin_layout Standard
-gamY comes with an executable, gamY.exe, which does not require any further
- installation.
- It can also be run as a python script which simply requires a python installati
-on.
+gamY is run from Python and requires Python with dreamtools installed.
+\end_layout
+
+\begin_layout LyX-Code
+pip install dream-tools
 \end_layout
 
 \begin_layout Section
@@ -220,27 +225,25 @@ Running gamY
 \end_layout
 
 \begin_layout Standard
-gamY can be used together with the GAMS-Python-API to run GAMS jobs directly
- from Python, or it can be run as a script run from a terminal, for example
- in a Windows .cmd file as shown in the box below.
+gamY is usually called from Python.
+ A small project-specific run.py file can set paths and run a sequence of .gms files.
 \end_layout
 
 \begin_layout Standard
-When run as a script, gamY does 2 things:
+When called from Python,
+ gamY does 2 things:
 \end_layout
 
 \begin_layout Enumerate
-gamY processes the input file, expanding all gamY commands, and outputs
- a file with plain GAMS code.
- To distinguish the input file and the expanded output file we use the extension
- .gmy for the expanded file and put it in a sub-directory called 
+gamY processes the input file,
+ expanding all gamY commands,
+ and outputs a file with plain GAMS code.
+ To distinguish the input file and the expanded output file we use the extension .gmy for the expanded file and put it in a sub-directory called 
 \emph on
 'Expanded'
 \emph default
 .
- The expanded .gmy file can be very verbose and should only be looked at
- for debugging purposes or to gain a better understanding of how gamY works
- behind the scenes.
+ The expanded .gmy file can be very verbose and should only be looked at for debugging purposes or to gain a better understanding of how gamY works behind the scenes.
 \end_layout
 
 \begin_layout Enumerate
@@ -248,14 +251,13 @@ gamY opens GAMS and tells it to execute the expanded GAMS file.
 \end_layout
 
 \begin_layout Standard
-GAMS' save and restart feature can also be used with gamY (as shown in the
- box below).
- In that case, gamY automatically produces and reads a .pkl file containing
- metadata.
+GAMS' save and restart feature can also be used with gamY.
+ In that case,
+ gamY automatically produces and reads a .pkl file containing metadata.
 \end_layout
 
 \begin_layout Subsubsection
-Running gamY from .cmd file
+Running gamY from Python
 \end_layout
 
 \begin_layout Standard
@@ -278,41 +280,28 @@ backgroundcolor "none"
 status open
 
 \begin_layout LyX-Code
-set gamY=
-\color red
-Q:
-\backslash
-gamY
-\backslash
-gamY.exe
+import dreamtools as dt
 \end_layout
 
 \begin_layout LyX-Code
-
+from dreamtools.gamY import run
 \end_layout
 
 \begin_layout LyX-Code
-:: Run a .gms file using gamY
+run(r"../Model/settings.gms",
+ s=r"../Model/Savepoints/settings")
 \end_layout
 
 \begin_layout LyX-Code
-%gamY% test.gms
+run(r"../Model/sets.gms",
+ r=r"../Model/Savepoints/settings",
+ s=r"../Model/Savepoints/sets")
 \end_layout
 
 \begin_layout LyX-Code
-
-\end_layout
-
-\begin_layout LyX-Code
-:: Run multiple .gms files with gamY using the GAMS save and restart feature
-\end_layout
-
-\begin_layout LyX-Code
-%gamY% a.gms s=a
-\end_layout
-
-\begin_layout LyX-Code
-%gamY% b.gms r=a s=b
+run(r"../Model/variables.gms",
+ r=r"../Model/Savepoints/sets",
+ s=r"../Model/Savepoints/variables")
 \end_layout
 
 \end_inset
@@ -327,63 +316,13 @@ gamY.exe
 
 \end_layout
 
-\begin_layout Standard
-To work offline, copy the gamY 
-\emph on
-executable 
-\begin_inset Quotes xld
-\end_inset
-
-Q:
-\backslash
-gamY
-\emph default
-
-\backslash
-gamY.exe
-\begin_inset Quotes xrd
-\end_inset
-
- to your local project and replace 
-\emph on
-\color red
-
-\begin_inset Quotes xld
-\end_inset
-
-
-\emph default
-Q:
-\backslash
-gamY
-\backslash
-gamY.exe
-\begin_inset Quotes xrd
-\end_inset
-
-
-\color inherit
- w
-\color black
-ith 
-\begin_inset Quotes xld
-\end_inset
-
-gamY.exe
-\begin_inset Quotes xrd
-\end_inset
-
- 
-\color inherit
-in the above.
-\end_layout
-
 \begin_layout Section
 General syntax
 \end_layout
 
 \begin_layout Itemize
-Nothing is case sensitive, just like in GAMS.
+Nothing is case sensitive,
+ just like in GAMS.
 \end_layout
 
 \begin_layout Itemize
@@ -395,17 +334,19 @@ All gamY macros start with a "$".
 \end_layout
 
 \begin_layout Itemize
-Square brackets are preferred for encasing sets, e.g.
+Square brackets are preferred for encasing sets,
+ e.g.
  x[t] rather than x(t)
 \end_layout
 
 \begin_layout Itemize
-Neither comments or macros have be at the beginning of a line (unlike GAMS
- dollar commands and '*' comments)
+Neither comments or macros have be at the beginning of a line (unlike GAMS dollar commands and '*' comments)
 \end_layout
 
 \begin_layout Itemize
-Items can be separated by commas, line breaks, or a mix.
+Items can be separated by commas,
+ line breaks,
+ or a mix.
 \end_layout
 
 \begin_layout Itemize
@@ -413,8 +354,10 @@ gamY macros are processed before anything else in the program.
 \end_layout
 
 \begin_layout Itemize
-Flow control statements (IF, LOOP, FOR, and FUNCTION) are processed before
- other macros.
+Flow control statements (IF,
+ LOOP,
+ FOR,
+ and FUNCTION) are processed before other macros.
 \end_layout
 
 \begin_layout Itemize
@@ -422,7 +365,8 @@ gamY macros can be nested.
 \end_layout
 
 \begin_layout Itemize
-Nested flow control macros must be identified with a number, e.g.
+Nested flow control macros must be identified with a number,
+ e.g.
 \end_layout
 
 \begin_layout Standard
@@ -449,12 +393,15 @@ status open
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 $IF1 <condition>:
 \end_layout
 
 \begin_deeper
 \begin_layout LyX-Code
-$IF2 <condition>: 
+$IF2 <condition>:
+ 
 \end_layout
 
 \begin_deeper
@@ -469,6 +416,8 @@ $ENDIF2
 
 \end_deeper
 \begin_layout LyX-Code
+
+\family roman
 $ENDIF1 
 \end_layout
 
@@ -491,20 +440,20 @@ Group
 
 \begin_layout Standard
 A gamY group is a data structure containing variables.
- New variables should always be defined using the $GROUP command rather
- than a GAMS 
+ New variables should always be defined using the $GROUP command rather than a GAMS 
 \emph on
 variables
 \emph default
  statement.
- The group command bundles together variables so that they can be manipulated
- together more easily, using other gamY macros such as $FIX, $UNFIX, $LOOP,
- $DISPLAY, and even $GROUP itself.
- Variable elements can be selectively included in a group using dollar condition
-s.
+ The group command bundles together variables so that they can be manipulated together more easily,
+ using other gamY macros such as $FIX,
+ $UNFIX,
+ $LOOP,
+ $DISPLAY,
+ and even $GROUP itself.
+ Variable elements can be selectively included in a group using dollar conditions.
  Note that conditions ALWAYS need to be enclosed in round brackets.
- Groups can be added together (union operation) or removed (complement operation
-) as shown in the examples below.
+ Groups can be added together (union operation) or removed (complement operation) as shown in the examples below.
 \end_layout
 
 \begin_layout Subsection
@@ -519,6 +468,18 @@ $GROUP
  <group name> <groups and/or variables>
 \series bold
 ;
+\end_layout
+
+\begin_layout Standard
+Use $GROUP+ to add to an existing group without repeating the group name in the body.
+\end_layout
+
+\begin_layout LyX-Code
+
+\series bold
+$GROUP+
+\series default
+ <group name> <additional groups and/or variables>;
 \end_layout
 
 \begin_layout Subsection
@@ -554,6 +515,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $GROUP
 \series default
@@ -587,6 +549,8 @@ label for variable 2
 
 \end_deeper
 \begin_layout LyX-Code
+
+\family roman
 ;
 \end_layout
 
@@ -631,6 +595,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $GROUP
 \series default
@@ -639,7 +604,8 @@ $GROUP
 
 \begin_deeper
 \begin_layout LyX-Code
-group1, var3 
+group1,
+ var3 
 \begin_inset Quotes xld
 \end_inset
 
@@ -652,11 +618,14 @@ Label for variable 3
 
 \end_deeper
 \begin_layout LyX-Code
+
+\family roman
 ;
 \end_layout
 
 \begin_layout LyX-Code
 
+\family roman
 \color gray
 # Commas and line breaks can both be used to separate groups/variables
 \end_layout
@@ -674,8 +643,7 @@ Label for variable 3
 \end_layout
 
 \begin_layout Subsubsection
-Groups can be re-defined (or modified by including the existing group in
- the definition)
+Groups can be re-defined (or modified by including the existing group in the definition)
 \end_layout
 
 \begin_layout Standard
@@ -699,6 +667,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $GROUP
 \series default
@@ -724,17 +693,21 @@ Remember labels for new variables!
 
 \end_deeper
 \begin_layout LyX-Code
+
+\family roman
 ;
 \end_layout
 
 \begin_layout LyX-Code
 
+\family roman
 \color gray
 # Note that sets and labels are ignored for existing variables,
 \end_layout
 
 \begin_layout LyX-Code
 
+\family roman
 \color gray
 # but are often convenient to keep.
 \end_layout
@@ -776,6 +749,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $GROUP
 \series default
@@ -797,13 +771,85 @@ label for variable 2
 
 \end_deeper
 \begin_layout LyX-Code
+
+\family roman
 ;
 \end_layout
 
 \begin_layout LyX-Code
 
+\family roman
 \color gray
 # Note that conditions ALWAYS need to be enclosed in round brackets.
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset space ~
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsubsection
+Subsets can be written directly in the set position
+\end_layout
+
+\begin_layout Standard
+If a variable has already been defined over a larger set,
+ a subset can be written directly in the set position.
+ gamY converts the subset to a dollar condition and keeps the variable's original sets.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Box Boxed
+position "t"
+hor_pos "c"
+has_inner_box 1
+inner_pos "t"
+use_parbox 0
+use_makebox 0
+width "100col%"
+special "none"
+height "1in"
+height_special "totalheight"
+thickness "0.4pt"
+separation "3pt"
+shadowsize "4pt"
+framecolor "black"
+backgroundcolor "none"
+status open
+
+\begin_layout LyX-Code
+
+\family roman
+\series bold
+$GROUP
+\series default
+ group6
+\end_layout
+
+\begin_deeper
+\begin_layout LyX-Code
+var2[a18,t]
+\end_layout
+
+\end_deeper
+\begin_layout LyX-Code
+
+\family roman
+;
+\end_layout
+
+\begin_layout LyX-Code
+
+\family roman
+\color gray
+# Equivalent to var2[a,t]$(a18[a])
 \end_layout
 
 \end_inset
@@ -843,6 +889,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $GROUP
 \series default
@@ -851,16 +898,20 @@ $GROUP
 
 \begin_deeper
 \begin_layout LyX-Code
-var2[a,t], -var2[a,t]$(a.val < 18)
+var2[a,t],
+ -var2[a,t]$(a.val < 18)
 \end_layout
 
 \end_deeper
 \begin_layout LyX-Code
+
+\family roman
 ;
 \end_layout
 
 \begin_layout LyX-Code
 
+\family roman
 \color gray
 # group4 is identical to group3
 \end_layout
@@ -902,6 +953,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $GROUP
 \series default
@@ -915,11 +967,14 @@ group1$(t.val > 2019)
 
 \end_deeper
 \begin_layout LyX-Code
+
+\family roman
 ;
 \end_layout
 
 \begin_layout LyX-Code
 
+\family roman
 \color gray
 # Note that all variables in group1 must be defined over t in this case
 \end_layout
@@ -935,16 +990,15 @@ Block
 
 \begin_layout Standard
 A block is a data structure containing equations.
- New equations should always be defined using the $BLOCK command rather
- than a GAMS 
+ New equations should always be defined using the $BLOCK command rather than a GAMS 
 \emph on
 EQUATIONS
 \emph default
  statement.
- The block command bundles together equations so that they can be manipulated
- together more easily, using other gamY macros such as $LOOP or $MODEL.
- Whenever a gamY block is defined, an equivalent GAMS model is also defined
- and can be used in solve statements (as shown in the example below).
+ The block command bundles together equations so that they can be manipulated together more easily,
+ using other gamY macros such as $LOOP or $MODEL.
+ Whenever a gamY block is defined,
+ an equivalent GAMS model is also defined and can be used in solve statements (as shown in the example below).
 \end_layout
 
 \begin_layout Subsection
@@ -962,6 +1016,35 @@ $BLOCK
 \begin_deeper
 \begin_layout LyX-Code
 <equation definitions>
+\end_layout
+
+\end_deeper
+\begin_layout LyX-Code
+
+\series bold
+$ENDBLOCK
+\end_layout
+
+\begin_layout Standard
+A block can also map its equations to endogenous variables by adding a group
+ name after the block name.
+ The variables must already be defined with $GROUP.
+ gamY adds the associated variables to the supplied group and uses the variable
+ names as equation names when no explicit equation name is given.
+ An optional block-level dollar condition can be placed after the group name.
+\end_layout
+
+\begin_layout LyX-Code
+
+\series bold
+$BLOCK
+\series default
+ <block name> <endogenous group> [<dollar condition>]
+\end_layout
+
+\begin_deeper
+\begin_layout LyX-Code
+<equations mapped to endogenous variables>
 \end_layout
 
 \end_deeper
@@ -996,6 +1079,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $BLOCK
 \series default
@@ -1016,15 +1100,20 @@ eq2[t]..
 \end_deeper
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $ENDBLOCK
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 solve MyBlock using CNS;
 \end_layout
 
@@ -1033,14 +1122,110 @@ solve MyBlock using CNS;
 
 \end_layout
 
+\begin_layout Subsection
+Endogenous variable mapping
+\end_layout
+
+\begin_layout Standard
+In the mapped form,
+ an equation without an explicit name is associated with the first variable
+ on the left-hand side.
+ The sets and conditions are carried to the generated equation and to the
+ endogenous group.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Box Boxed
+position "t"
+hor_pos "c"
+has_inner_box 1
+inner_pos "t"
+use_parbox 0
+use_makebox 0
+width "100col%"
+special "none"
+height "1in"
+height_special "totalheight"
+thickness "0.4pt"
+separation "3pt"
+shadowsize "4pt"
+framecolor "black"
+backgroundcolor "none"
+status open
+
+\begin_layout LyX-Code
+
+\series bold
+$GROUP
+\series default
+ G_endo
+\end_layout
+
+\begin_deeper
+\begin_layout LyX-Code
+q[t] "Output"
+\end_layout
+
+\end_deeper
+\begin_layout LyX-Code
+;
+\end_layout
+
+\begin_layout LyX-Code
+
+\series bold
+$BLOCK
+\series default
+ B_market G_endo $(tx0[t])
+\end_layout
+
+\begin_deeper
+\begin_layout LyX-Code
+q[t]$(q_active[t]).. q[t] =E= demand[t];
+\end_layout
+
+\end_deeper
+\begin_layout LyX-Code
+
+\series bold
+$ENDBLOCK
+\end_layout
+
+\begin_layout LyX-Code
+
+\color gray
+# Defines equation q[t] and adds q[t] to G_endo
+\end_layout
+
+\begin_layout LyX-Code
+
+\color gray
+# with condition $((tx0[t]) and (q_active[t])).
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+If the equation has an explicit name,
+ gamY first tries to infer the associated variable from that name.
+ For example,
+ E_q[t] maps to q if q is a defined variable and appears in the equation.
+ A suffix can be added with &,
+ for example q&price[t] generates a distinct equation name for another equation
+ associated with q.
+\end_layout
+
 \begin_layout Section
 Model
 \end_layout
 
 \begin_layout Standard
-The $MODEL command defines a new block data structure by combining existing
- blocks and/or equations.
- By default, blocks cannot be redefined.
+The $MODEL command defines a new block data structure by combining existing blocks and/or equations.
+ By default,
+ blocks cannot be redefined.
  The GAMS options $onMultiR or $onMulti can be used to change this behavior.
 \end_layout
 
@@ -1083,6 +1268,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $MODEL
 \series default
@@ -1100,14 +1286,20 @@ eq3
 
 \end_deeper
 \begin_layout LyX-Code
+
+\family roman
 ;
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 solve MyNewModel using CNS;
 \end_layout
 
@@ -1125,18 +1317,17 @@ Loop
 \end_layout
 
 \begin_layout Standard
-The $LOOP command is used to loop over a group or block, repeating an operation
- for each variable in the group or each equation in the block.
+The $LOOP command is used to loop over a group or block,
+ repeating an operation for each variable in the group or each equation in the block.
 \end_layout
 
 \begin_layout Standard
-Within the loop, a number of special keywords are automaically replaced
- with fields from the variable or equation.
+Within the loop,
+ a number of special keywords are automaically replaced with fields from the variable or equation.
 \end_layout
 
 \begin_layout Standard
-Looping over groups and blocks is described separately in the two following
- sections.
+Looping over groups and blocks is described separately in the two following sections.
 \end_layout
 
 \begin_layout Section
@@ -1161,11 +1352,13 @@ $LOOP
 \series bold
 {name}
 \series default
-, 
+,
+ 
 \series bold
 {sets}
 \series default
-, and 
+,
+ and 
 \series bold
 {conditions}
 \series default
@@ -1180,29 +1373,17 @@ $ENDLOOP
 \end_layout
 
 \begin_layout Description
-
-\series bold
-{name} 
-\series default
-is replaced with the name of the variable
+{name} is replaced with the name of the variable
 \end_layout
 
 \begin_layout Description
-
-\series bold
-{sets} 
-\series default
-is replaced with the sets that the variable is defined over
+{sets} is replaced with the sets that the variable is defined over
 \end_layout
 
 \begin_layout Description
-
-\series bold
-{conditions} 
-\series default
-is replaced with the dollar-conditions that limits which elements of a variable
- are included in the group being looped over.
- If no dollar-condition applies, it is replaced by (1) (i.e.
+{conditions} is replaced with the dollar-conditions that limits which elements of a variable are included in the group being looped over.
+ If no dollar-condition applies,
+ it is replaced by (1) (i.e.
 
 \shape italic
  true
@@ -1235,6 +1416,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $GROUP
 \series default
@@ -1256,15 +1438,20 @@ Variable defined over age and time
 
 \end_deeper
 \begin_layout LyX-Code
+
+\family roman
 ;
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $LOOP
 \series default
@@ -1303,15 +1490,20 @@ $(
 \end_deeper
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $EndLoop
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 \begin_inset Formula $\rightarrow$
 \end_inset
 
@@ -1319,14 +1511,20 @@ $EndLoop
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 parameter saved_v1[a,t];
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 saved_v1[a,t]$(a.val > 15) = v1.L[a,t];
 \end_layout
 
@@ -1357,19 +1555,23 @@ $LOOP
 \series bold
 {name}
 \series default
-, 
+,
+ 
 \series bold
 {sets}
 \series default
-, 
+,
+ 
 \series bold
 {conditions}
 \series default
-, 
+,
+ 
 \series bold
 {LHS}
 \series default
-, and
+,
+ and
 \series bold
  {RHS}
 \series default
@@ -1384,29 +1586,17 @@ $ENDLOOP
 \end_layout
 
 \begin_layout Description
-
-\series bold
-{name} 
-\series default
-is replaced with the name of the equation.
+{name} is replaced with the name of the equation.
 \end_layout
 
 \begin_layout Description
-
-\series bold
-{sets} 
-\series default
-is replaced with the sets that the equation is defined over.
+{sets} is replaced with the sets that the equation is defined over.
 \end_layout
 
 \begin_layout Description
-
-\series bold
-{conditions} 
-\series default
-is replaced with the dollar-conditions that limits which elements the equation
- is defined for.
- If no dollar-condition applies, it is replaced by (1) (i.e.
+{conditions} is replaced with the dollar-conditions that limits which elements the equation is defined for.
+ If no dollar-condition applies,
+ it is replaced by (1) (i.e.
 
 \shape italic
  true
@@ -1415,19 +1605,11 @@ is replaced with the dollar-conditions that limits which elements the equation
 \end_layout
 
 \begin_layout Description
-
-\series bold
-{LHS} 
-\series default
-is replaced with the left hand side of the equation.
+{LHS} is replaced with the left hand side of the equation.
 \end_layout
 
 \begin_layout Description
-
-\series bold
-{RHS} 
-\series default
-is replaced with the right hand side of the equation.
+{RHS} is replaced with the right hand side of the equation.
 \end_layout
 
 \begin_layout Subsection
@@ -1459,6 +1641,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $BLOCK 
 \series default
@@ -1481,16 +1664,20 @@ E_eq2[t]..
 \end_deeper
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $ENDBLOCK
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $LOOP
 \series default
@@ -1505,15 +1692,20 @@ $LOOP
 \end_deeper
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $EndLoop
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 \begin_inset Formula $\rightarrow$
 \end_inset
 
@@ -1521,14 +1713,20 @@ $EndLoop
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 E_eq1_terminal[s,t]$(tEnd[t] and (sp[s])) v1[s,t] =E= v2[t];
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 E_eq2_terminal[t]$(tEnd[t] and (1)) v2[t] =E= 1;
 \end_layout
 
@@ -1542,10 +1740,8 @@ Advanced set manipulation in loops
 \end_layout
 
 \begin_layout Standard
-A number of advanced options are availiable for modifying the sets or applying
- conditions to sets in loops.
- These are useful for getting around the fact that we cannot for example
- apply a condition 
+A number of advanced options are availiable for modifying the sets or applying conditions to sets in loops.
+ These are useful for getting around the fact that we cannot for example apply a condition 
 \emph on
 $(t.val > 2019) 
 \emph default
@@ -1562,11 +1758,11 @@ Fix
 
 \begin_layout Standard
 The $FIX macro is used to fix variables or groups of variables.
- By default, the variables are fixed to their current levels.
- Alternatively, a value can be supplied that the variables should be fixed
- to.
- All the same syntax for combining groups and variables that can be used
- with $GROUP macro can also be used with a $FIX macro.
+ By default,
+ the variables are fixed to their current levels.
+ Alternatively,
+ a value can be supplied that the variables should be fixed to.
+ All the same syntax for combining groups and variables that can be used with $GROUP macro can also be used with a $FIX macro.
 \end_layout
 
 \begin_layout Subsection
@@ -1610,6 +1806,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $GROUP
 \series default
@@ -1626,6 +1823,7 @@ Variable defined over age and time
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $FIX
 \series default
@@ -1639,6 +1837,8 @@ $FIX
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 \begin_inset Formula $\rightarrow$
 \end_inset
 
@@ -1646,10 +1846,14 @@ $FIX
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 var1.fx[a,t] = var1.l[a,t];
 \end_layout
 
@@ -1683,6 +1887,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $FIX
 \series default
@@ -1696,6 +1901,8 @@ $FIX
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 \begin_inset Formula $\rightarrow$
 \end_inset
 
@@ -1703,10 +1910,14 @@ $FIX
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 var1.fx[a,t] = 100;
 \end_layout
 
@@ -1740,6 +1951,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $GROUP 
 \series default
@@ -1756,16 +1968,19 @@ New variable
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $FIX
 \series default
  group1$(a.val > 15)
 \series bold
-, 
+,
+ 
 \series default
 var2
 \series bold
-, 
+,
+ 
 \series default
 -var2$(t.val > 2019);
 \end_layout
@@ -1775,6 +1990,8 @@ var2
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 \begin_inset Formula $\rightarrow$
 \end_inset
 
@@ -1782,14 +1999,20 @@ var2
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 var1.fx[a,t]$(a.val > 15) = var1.l[a,t];
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 v2.fx[t]$(not (t.val > 2019)) = v2.l[t];
 \end_layout
 
@@ -1804,11 +2027,11 @@ Unfix
 
 \begin_layout Standard
 The $UNFIX macro is used to set the bounds of variables or groups of variables.
- By default, the lower and upper bounds are set to -inf and +inf respectively.
- Alternatively, a lower and upper bound value can be supplied which the
- variables' bounds should be set to.
- All the same syntax for combining groups and variables that can be used
- with $GROUP macro can also be used with a $UNFIX macro.
+ By default,
+ the lower and upper bounds are set to -inf and +inf respectively.
+ Alternatively,
+ a lower and upper bound value can be supplied which the variables' bounds should be set to.
+ All the same syntax for combining groups and variables that can be used with $GROUP macro can also be used with a $UNFIX macro.
 \end_layout
 
 \begin_layout Subsection
@@ -1820,7 +2043,8 @@ Syntax
 \series bold
 $UNFIX
 \series default
-[(<lower bound>, <upper bound>)] <groups and/or variables>;
+[(<lower bound>,
+ <upper bound>)] <groups and/or variables>;
 \end_layout
 
 \begin_layout Subsection
@@ -1852,6 +2076,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $GROUP
 \series default
@@ -1868,6 +2093,7 @@ Variable defined over age and time
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $UNFIX
 \series default
@@ -1881,6 +2107,8 @@ $UNFIX
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 \begin_inset Formula $\rightarrow$
 \end_inset
 
@@ -1888,14 +2116,20 @@ $UNFIX
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 var1.lo[a,t] = -inf;
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 var1.up[a,t] = inf;
 \end_layout
 
@@ -1936,10 +2170,12 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $UNFIX
 \series default
-(0, inf) group1
+(0,
+ inf) group1
 \series bold
 ;
 \end_layout
@@ -1949,6 +2185,8 @@ $UNFIX
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 \begin_inset Formula $\rightarrow$
 \end_inset
 
@@ -1956,14 +2194,20 @@ $UNFIX
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 var1.lo[a,t] = 0;
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 var1.up[a,t] = inf;
 \end_layout
 
@@ -1977,10 +2221,10 @@ Display
 \end_layout
 
 \begin_layout Standard
-The $DISPLAY macro is used to display a group of variables in the listing
- fil (.lst file).
- All the same syntax for combining groups and variables that can be used
- with $GROUP macro can also be used with a $DISPLAY macro.
+The $DISPLAY macro is used to display a group of variables in the listing fil (.lst file).
+ All the same syntax for combining groups and variables that can be used with $GROUP macro can also be used with a $DISPLAY macro.
+ $DISPLAY_ALL uses the same syntax,
+ but ignores group dollar conditions when constructing the report.
 \end_layout
 
 \begin_layout Subsection
@@ -1991,6 +2235,14 @@ Syntax
 
 \series bold
 $DISPLAY
+\series default
+ <groups and/or variables>;
+\end_layout
+
+\begin_layout LyX-Code
+
+\series bold
+$DISPLAY_ALL
 \series default
  <groups and/or variables>;
 \end_layout
@@ -2020,6 +2272,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $DISPLAY
 \series default
@@ -2039,15 +2292,11 @@ If
 
 \begin_layout Standard
 The $IF macro control which parts of a file is executed.
- Remember that gamY macros are executed before any GAMS code and gamY $IF
- statements therefore cannot use any parameters etc.
+ Remember that gamY macros are executed before any GAMS code and gamY $IF statements therefore cannot use any parameters etc.
  in the condition (regular GAMS if statements can do that).
- The $IF macro is most useful in conjunction with the $SET or $SETGLOBAL
- macros.
- The condition can be be (almost) any statement that can be evaluated by
- Python.
- Nested if statements must be matched by adding a number to the matching
- $IF and $ENDIF macros.
+ The $IF macro is most useful in conjunction with the $SET or $SETGLOBAL macros.
+ The condition can be be (almost) any statement that can be evaluated by Python.
+ Nested if statements must be matched by adding a number to the matching $IF and $ENDIF macros.
 \end_layout
 
 \begin_layout Subsection
@@ -2101,6 +2350,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $IF
 \series default
@@ -2119,6 +2369,7 @@ display '1';
 \end_deeper
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $ENDIF
 \end_layout
@@ -2160,6 +2411,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $IF1
 \series default
@@ -2188,18 +2440,21 @@ $ENDIF2
 \end_deeper
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $ENDIF1
 \end_layout
 
 \begin_layout LyX-Code
 
+\family roman
 \color gray
 # Nested if statements must be matched
 \end_layout
 
 \begin_layout LyX-Code
 
+\family roman
 \color gray
 # by addding an identifying number to the matching $IF and $ENDIF macros.
 \end_layout
@@ -2214,18 +2469,18 @@ Macro variables
 \end_layout
 
 \begin_layout Standard
-The $SET, $SETLOCAL, and $SETGLOBAL commands from GAMS are also parsed by
- gamY and are used to define macro variables.
- Local macro variables take precedent over global variables, but are not
- remembered between files (using the save/restart feature).
+The $SET,
+ $SETLOCAL,
+ and $SETGLOBAL commands from GAMS are also parsed by gamY and are used to define macro variables.
+ Local macro variables take precedent over global variables,
+ but are not remembered between files (using the save/restart feature).
  $SET and $SETLOCAL have identical behavior.
- Any names encased in '%' characters are replaced by gamY if the name is
- defined.
+ Any names encased in '%' characters are replaced by gamY if the name is defined.
 \end_layout
 
 \begin_layout Standard
-The $EVAL macros are identical to the $SET macros, except the assigned expressio
-n is evaluated before assignment.
+The $EVAL macros are identical to the $SET macros,
+ except the assigned expression is evaluated before assignment.
 \end_layout
 
 \begin_layout Subsection
@@ -2281,6 +2536,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $SETGLOBAL 
 \series default
@@ -2288,6 +2544,8 @@ terminal_age 100
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 sets a 
 \begin_inset Quotes xld
 \end_inset
@@ -2300,10 +2558,14 @@ Age groups
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 \begin_inset Formula $\rightarrow$
 \end_inset
 
@@ -2311,10 +2573,14 @@ Age groups
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 sets a 
 \begin_inset Quotes xld
 \end_inset
@@ -2367,6 +2633,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $EVAL 
 \series default
@@ -2374,6 +2641,8 @@ terminal_age_plus_1 %terminal_age%+1
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 set a 
 \begin_inset Quotes xld
 \end_inset
@@ -2386,10 +2655,14 @@ Age groups
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 \begin_inset Formula $\rightarrow$
 \end_inset
 
@@ -2397,10 +2670,14 @@ Age groups
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 set a 
 \begin_inset Quotes xld
 \end_inset
@@ -2426,10 +2703,8 @@ For loops
 \end_layout
 
 \begin_layout Standard
-The $FOR macro is used to loop over arbitrary iterables that can be evaluated
- by Pyhon.
- Nested for loops must be matched by adding a number to the matching $FOR
- and $ENDFOR macros.
+The $FOR macro is used to loop over arbitrary iterables that can be evaluated by Pyhon.
+ Nested for loops must be matched by adding a number to the matching $FOR and $ENDFOR macros.
 \end_layout
 
 \begin_layout Subsection
@@ -2493,14 +2768,19 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $FOR
 \series default
- {parameter}, {value} 
+ {parameter},
+ {value} 
 \series bold
 in
 \series default
- [('a', 1), ('b', 2)]:
+ [('a',
+ 1),
+ ('b',
+ 2)]:
 \end_layout
 
 \begin_deeper
@@ -2511,15 +2791,20 @@ in
 \end_deeper
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $ENDFOR
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 \begin_inset Formula $\rightarrow$
 \end_inset
 
@@ -2527,14 +2812,20 @@ $ENDFOR
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 a = 1;
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 b = 2;
 \end_layout
 
@@ -2548,8 +2839,8 @@ Import
 \end_layout
 
 \begin_layout Standard
-The $IMPORT macro is equivalent to the the GAMS $INCLUDE command, except
- that the included file is also pre-processed by gamY.
+The $IMPORT macro is equivalent to the the GAMS $INCLUDE command,
+ except that the included file is also pre-processed by gamY.
 \end_layout
 
 \begin_layout Subsection
@@ -2589,6 +2880,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $IMPORT 
 \series default
@@ -2606,11 +2898,10 @@ User defined functions
 
 \begin_layout Standard
 Users can define their own functions by using the $FUNCTION macro.
- GAMS already allows users to define their own macros, but gamY user functions
- are useful as they allow for functions which utilize other gamY features.
- A function can be used to define other functions, however nested function
- definitions must be matched by adding a number to the matching $FUNCTION
- and $ENDFUNCTION macros.
+ GAMS already allows users to define their own macros,
+ but gamY user functions are useful as they allow for functions which utilize other gamY features.
+ A function can be used to define other functions,
+ however nested function definitions must be matched by adding a number to the matching $FUNCTION and $ENDFUNCTION macros.
  
 \end_layout
 
@@ -2631,7 +2922,8 @@ $FUNCTION
 \series bold
  
 \series default
-<function name>([<argument name>, <...>])
+<function name>([<argument name>,
+ <...>])
 \series bold
 :
 \end_layout
@@ -2659,7 +2951,8 @@ Function call:
 \series bold
 @
 \series default
-<function name>([<argument>, <...>]);
+<function name>([<argument>,
+ <...>]);
 \end_layout
 
 \begin_layout Subsection
@@ -2693,12 +2986,14 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \color gray
 # A regular GAMS macro could have been used instead
 \end_layout
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $FUNCTION
 \series default
@@ -2713,23 +3008,32 @@ sqrt(sqr({x}))
 \end_deeper
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $ENDFOR
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 a[t] = @abs(b[t]);
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 \begin_inset Formula $\rightarrow$
 \end_inset
 
@@ -2737,10 +3041,14 @@ a[t] = @abs(b[t]);
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 a[t] = sqrt(sqr(b[t]));
 \end_layout
 
@@ -2781,12 +3089,14 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \color gray
 # Set lower bounds to zero if the variable is not fixed
 \end_layout
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $FUNCTION
 \series default
@@ -2820,16 +3130,20 @@ $ENDLOOP
 \end_deeper
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $ENDFUNCTION
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 @
 \series default
@@ -2846,11 +3160,10 @@ Search and replace
 \end_layout
 
 \begin_layout Standard
-The $REPLACE and $REGEX macros are used to do arbitrary text search and
- replace procedures.
- Optionally, a maximum number of replacements can be supplied.
- The $REGEX macro interprets the <old> string as a regular expression and
- allows for captured groups in the replacement string.
+The $REPLACE and $REGEX macros are used to do arbitrary text search and replace procedures.
+ Optionally,
+ a maximum number of replacements can be supplied.
+ The $REGEX macro interprets the <old> string as a regular expression and allows for captured groups in the replacement string.
  See 
 \begin_inset CommandInset href
 LatexCommand href
@@ -2862,8 +3175,7 @@ target "https://docs.python.org/3/library/re.html"
 \end_layout
 
 \begin_layout Standard
-Nested replacements must be matched by adding a number to the matching $REPLACE
- and $REPLACE macros.
+Nested replacements must be matched by adding a number to the matching $REPLACE and $REPLACE macros.
  
 \end_layout
 
@@ -2883,6 +3195,7 @@ $REPLACE
 <old>
 \series bold
 ,
+
 \series default
  <new> [
 \series bold
@@ -2926,6 +3239,7 @@ $REGEX
 <old>
 \series bold
 ,
+
 \series default
  <new> [
 \series bold
@@ -2981,6 +3295,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $REPLCE(
 \series default
@@ -2992,7 +3307,8 @@ x
 \begin_inset Quotes xrd
 \end_inset
 
-, 
+,
+ 
 \begin_inset Quotes xld
 \end_inset
 
@@ -3011,15 +3327,20 @@ x[t] = xy[t]
 \end_deeper
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $ENDREPLACE
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 \begin_inset Formula $\rightarrow$
 \end_inset
 
@@ -3027,10 +3348,14 @@ $ENDREPLACE
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 y[t] = yy[t];
 \end_layout
 
@@ -3073,6 +3398,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $REPLCE(
 \series default
@@ -3084,7 +3410,8 @@ x
 \begin_inset Quotes xrd
 \end_inset
 
-, 
+,
+ 
 \begin_inset Quotes xld
 \end_inset
 
@@ -3092,7 +3419,8 @@ y
 \begin_inset Quotes xrd
 \end_inset
 
-, 1)
+,
+ 1)
 \end_layout
 
 \begin_deeper
@@ -3103,15 +3431,20 @@ x[t] = xy[t]
 \end_deeper
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $ENDREPLACE
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 \begin_inset Formula $\rightarrow$
 \end_inset
 
@@ -3119,10 +3452,14 @@ $ENDREPLACE
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 y[t] = xy[t];
 \end_layout
 
@@ -3165,6 +3502,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $REGEX(
 \series default
@@ -3180,7 +3518,8 @@ w)
 \begin_inset Quotes xrd
 \end_inset
 
-, 
+,
+ 
 \begin_inset Quotes xld
 \end_inset
 
@@ -3201,15 +3540,20 @@ x[t] = y[t]
 \end_deeper
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $ENDREGEX
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 \begin_inset Formula $\rightarrow$
 \end_inset
 
@@ -3217,10 +3561,14 @@ $ENDREGEX
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
  
 \end_layout
 
 \begin_layout LyX-Code
+
+\family roman
 x.l[t] = y.l[t];
 \end_layout
 
@@ -3235,10 +3583,10 @@ Parameter groups
 
 \begin_layout Standard
 The $PGROUP macro is used to define and manipulate groups of parameters.
- p-groups are equivalent groups, except they contain parameters instead
- of variables.
- P-groups cannot be mixed with variable groups and they are not supported
- by other gamY macros, except LOOP.
+ p-groups are equivalent groups,
+ except they contain parameters instead of variables.
+ P-groups cannot be mixed with variable groups and they are not supported by other gamY macros,
+ except LOOP.
 \end_layout
 
 \begin_layout Subsection
@@ -3286,6 +3634,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $PGROUP
 \series default
@@ -3319,6 +3668,8 @@ label for parameter 2
 
 \end_deeper
 \begin_layout LyX-Code
+
+\family roman
 ;
 \end_layout
 
@@ -3332,18 +3683,260 @@ label for parameter 2
 \end_layout
 
 \begin_layout Section
+Set groups
+\end_layout
+
+\begin_layout Standard
+The $SETGROUP macro is used to define and manipulate groups of sets.
+ Set groups behave like parameter groups,
+ except they contain sets.
+ They can be looped over with $LOOP,
+ but cannot be mixed with variable groups or parameter groups.
+ $SGROUP is accepted as a short alias.
+\end_layout
+
+\begin_layout Subsection
+Syntax
+\end_layout
+
+\begin_layout LyX-Code
+
+\series bold
+$SETGROUP
+\series default
+ <set group name> <set groups and/or sets>;
+\end_layout
+
+\begin_layout Subsection
+Example
+\end_layout
+
+\begin_layout LyX-Code
+
+\series bold
+$SETGROUP
+\series default
+ G_sets
+\end_layout
+
+\begin_deeper
+\begin_layout LyX-Code
+t "Time periods"
+\end_layout
+
+\begin_layout LyX-Code
+s "Sectors"
+\end_layout
+
+\end_deeper
+\begin_layout LyX-Code
+;
+\end_layout
+
+\begin_layout LyX-Code
+
+\series bold
+$LOOP
+\series default
+ G_sets:
+\end_layout
+
+\begin_deeper
+\begin_layout LyX-Code
+display "Looping over {name}";
+\end_layout
+
+\end_deeper
+\begin_layout LyX-Code
+
+\series bold
+$ENDLOOP
+\end_layout
+
+\begin_layout Section
+Solve
+\end_layout
+
+\begin_layout Standard
+The $SOLVE macro creates a temporary model from the supplied blocks or equations and solves it as a CNS model.
+ It is useful when a full $MODEL declaration is unnecessary.
+\end_layout
+
+\begin_layout Subsection
+Syntax
+\end_layout
+
+\begin_layout LyX-Code
+
+\series bold
+$SOLVE
+\series default
+ <blocks and/or equations>;
+\end_layout
+
+\begin_layout Subsection
+Example
+\end_layout
+
+\begin_layout LyX-Code
+
+\series bold
+$SOLVE
+\series default
+ B_market,
+ E_numeraire;
+\end_layout
+
+\begin_layout Section
+Embedded Python
+\end_layout
+
+\begin_layout Standard
+$EVALPYTHON evaluates Python code and inserts the returned string in the expanded GAMS file.
+ $EXECPYTHON executes Python code for side effects and inserts nothing.
+ Both macros run while gamY is expanding the file and have access to the precompiler as self.
+\end_layout
+
+\begin_layout Subsection
+Syntax
+\end_layout
+
+\begin_layout LyX-Code
+
+\series bold
+$EVALPYTHON
+\end_layout
+
+\begin_deeper
+\begin_layout LyX-Code
+<python expression returning a string>
+\end_layout
+
+\end_deeper
+\begin_layout LyX-Code
+
+\series bold
+$ENDEVALPYTHON
+\end_layout
+
+\begin_layout LyX-Code
+
+\series bold
+$EXECPYTHON
+\end_layout
+
+\begin_deeper
+\begin_layout LyX-Code
+<python statements>
+\end_layout
+
+\end_deeper
+\begin_layout LyX-Code
+
+\series bold
+$ENDEXECPYTHON
+\end_layout
+
+\begin_layout Subsection
+Example
+\end_layout
+
+\begin_layout LyX-Code
+
+\series bold
+$EXECPYTHON
+\end_layout
+
+\begin_layout LyX-Code
+self.globals["scenario"] = "base"
+\end_layout
+
+\begin_layout LyX-Code
+
+\series bold
+$ENDEXECPYTHON
+\end_layout
+
+\begin_layout LyX-Code
+set s /%scenario%/;
+\end_layout
+
+\begin_layout LyX-Code
+
+\series bold
+$EVALPYTHON
+\end_layout
+
+\begin_layout LyX-Code
+"scalar n /" + str(2 + 3) + "/;"
+\end_layout
+
+\begin_layout LyX-Code
+
+\series bold
+$ENDEVALPYTHON
+\end_layout
+
+\begin_layout Section
+Automatic equation adjustments
+\end_layout
+
+\begin_layout Standard
+gamY can generate adjustment variables while expanding $BLOCK definitions.
+ These features are controlled from Python by setting module-level variables before running the precompiler.
+\end_layout
+
+\begin_layout Itemize
+automatic_dummy_suffix creates a set for each variable in a $GROUP and adds the corresponding dummy set as a block condition for equations mapped to that variable.
+\end_layout
+
+\begin_layout Itemize
+automatic_additive_residuals_prefix creates additive residual variables and adds them to equations associated with an endogenous variable.
+\end_layout
+
+\begin_layout Itemize
+automatic_multiplicative_residuals_prefix creates multiplicative residual variables and adds them to equations associated with an endogenous variable.
+\end_layout
+
+\begin_layout Itemize
+variable_equation_prefix is prepended to equation names generated from variable names in mapped blocks.
+\end_layout
+
+\begin_layout Subsection
+Example
+\end_layout
+
+\begin_layout LyX-Code
+import dreamtools.gamY.gamY as gamY
+\end_layout
+
+\begin_layout LyX-Code
+gamY.automatic_dummy_suffix = "_dummy"
+\end_layout
+
+\begin_layout LyX-Code
+gamY.automatic_additive_residuals_prefix = "j_"
+\end_layout
+
+\begin_layout LyX-Code
+gamY.automatic_multiplicative_residuals_prefix = "jr_"
+\end_layout
+
+\begin_layout LyX-Code
+gamY.run("model.gms")
+\end_layout
+
+\begin_layout Section
 Implementation notes
 \end_layout
 
 \begin_layout Standard
-The pre-processor is a prototype and uses 'brute force' regular expressions
- to find and replace the new macros.
- Macros can be nested and are processed inside out (using recursive descent
- parsing) from top to bottom.
- The program should be rewritten using a tokenizer, lexer, and parser to
- allow for unlimited nesting of flow control statements and to make the
- syntax more robust.
- Unittesting is not yet written.
+The pre-processor is a prototype and uses 'brute force' regular expressions to find and replace the new macros.
+ Macros can be nested and are processed inside out (using recursive descent parsing) from top to bottom.
+ The program should be rewritten using a tokenizer,
+ lexer,
+ and parser to allow for unlimited nesting of flow control statements and to make the syntax more robust.
+ The unit tests focus on precompiler expansion and do not require GAMS to execute a model.
 \end_layout
 
 \begin_layout Section
@@ -3358,8 +3951,7 @@ The Model
 
 \begin_layout Standard
 \noindent
-This exercise shows how to setup and solve a small multi-sector model for
- a closed economy.
+This exercise shows how to setup and solve a small multi-sector model for a closed economy.
 \begin_inset Foot
 status open
 
@@ -3416,12 +4008,12 @@ is labor.
 \begin_inset Formula $M_{j}$
 \end_inset
 
- is made using CES technology with inputs being output from all other sectors
- 
+ is made using CES technology with inputs being output from all other sectors 
 \begin_inset Formula $x_{i,j}$
 \end_inset
 
-, where 
+,
+ where 
 \begin_inset Formula $i$
 \end_inset
 
@@ -3518,7 +4110,8 @@ p_{j}^{M}M_{j}+wL_{j}=p_{j}Y_{j}
 
 \begin_layout Standard
 \noindent
-The demand for goods and the consumer's budget constraint are: 
+The demand for goods and the consumer's budget constraint are:
+ 
 \end_layout
 
 \begin_layout Standard
@@ -3564,9 +4157,10 @@ Y^{D}=wN
 
 \begin_layout Standard
 \noindent
-Finally, there are two equilibrium conditions - one for the goods market
- and one for the labor market - but due to Walras's law we need only one.
- As such, we add the equilibrium condition for the goods market:
+Finally,
+ there are two equilibrium conditions - one for the goods market and one for the labor market - but due to Walras's law we need only one.
+ As such,
+ we add the equilibrium condition for the goods market:
 \end_layout
 
 \begin_layout Standard
@@ -3583,8 +4177,7 @@ Y_{j}=\sum_{i}x_{i,j}+C_{j}
 
 \begin_layout Standard
 \noindent
-The model consists of equations (1)-(9) with the endogenous variables being
- 
+The model consists of equations (1)-(9) with the endogenous variables being 
 \begin_inset Formula $L_{j},M_{j}Y_{j},C_{j},x_{i,j},p_{j}^{Y},p_{j}^{M},w,Y^{D}.$
 \end_inset
 
@@ -3597,7 +4190,9 @@ The model consists of equations (1)-(9) with the endogenous variables being
 
 \begin_layout Standard
 \noindent
-Initially, use the following parameter values: 
+Initially,
+ use the following parameter values:
+ 
 \begin_inset Formula $\theta_{j}=1,E_{j}^{Y}=0.7,E_{j}^{C}=0.5,E_{j}^{M}=0.5.$
 \end_inset
 
@@ -3621,8 +4216,7 @@ Setting up and solving Model
 Sets.
 
 \series default
- Before defining any variables or equations we need to define the sets which
- the variables/equations are defined over.
+ Before defining any variables or equations we need to define the sets which the variables/equations are defined over.
  In this simple model we need only one set as the content of the sets 
 \begin_inset Formula $j$
 \end_inset
@@ -3655,8 +4249,8 @@ alias(j,i)
 Variables.
 
 \series default
- Create 2 groups: One for the endogenous variables and one for the exogenous
- variables and define the relevant variables within the relevant group.
+ Create 2 groups:
+ One for the endogenous variables and one for the exogenous variables and define the relevant variables within the relevant group.
  That is:
 \begin_inset Newline newline
 \end_inset
@@ -3686,6 +4280,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $GROUP
 \series default
@@ -3727,6 +4322,8 @@ wage rate
 
 \end_deeper
 \begin_layout LyX-Code
+
+\family roman
 ;
 \end_layout
 
@@ -3740,6 +4337,7 @@ wage rate
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $GROUP
 \series default
@@ -3781,6 +4379,8 @@ Price index
 
 \end_deeper
 \begin_layout LyX-Code
+
+\family roman
 ;
 \end_layout
 
@@ -3819,7 +4419,8 @@ Equations.
 \series default
 Write up the equations of the model (i.e.
  equations (1)-(9)).
- These are are contained within a model block - for example: 
+ These are are contained within a model block - for example:
+ 
 \begin_inset Newline newline
 \end_inset
 
@@ -3844,6 +4445,7 @@ status open
 
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $BLOCK
 \series default
@@ -3868,6 +4470,7 @@ eq1[j]..
 \end_deeper
 \begin_layout LyX-Code
 
+\family roman
 \series bold
 $ENDBLOCK
 \end_layout
@@ -3898,17 +4501,16 @@ Data and initialization.
  
 \series default
 Set the values for exogenous parameters and variables regularly as in GAMS.
- Values for endogenous variables which are calibrated should also be set
- here.
+ Values for endogenous variables which are calibrated should also be set here.
  In the current model this involves 
 \begin_inset Formula $x_{i,j},L_{j},C_{j}$
 \end_inset
 
 .
- In order to match these variables with the correct data from the IO-table
- in IOdata4_2a.gms, use a $FOR loop to loop over the correct set for each
- variable.
- For instance, for 
+ In order to match these variables with the correct data from the IO-table in IOdata4_2a.gms,
+ use a $FOR loop to loop over the correct set for each variable.
+ For instance,
+ for 
 \begin_inset Formula $C_{j}$
 \end_inset
 
@@ -3916,8 +4518,7 @@ Set the values for exogenous parameters and variables regularly as in GAMS.
 \begin_inset Formula $j=1,2,...,5$
 \end_inset
 
- while keeping the second dimension (the output dimension of the table)
- constant at 
+ while keeping the second dimension (the output dimension of the table) constant at 
 \begin_inset Quotes xld
 \end_inset
 
@@ -3927,9 +4528,7 @@ private consumption
 
 .
  Having loaded the data only initialization remains.
- Set reasonable starting values for the endogenous variables (in the calibration
- - see the next step) to both improve the starting point of the solver (thus
- increasing the likelyhood that the model is solved) and to avoid 
+ Set reasonable starting values for the endogenous variables (in the calibration - see the next step) to both improve the starting point of the solver (thus increasing the likelyhood that the model is solved) and to avoid 
 \begin_inset Quotes xld
 \end_inset
 
@@ -3966,18 +4565,21 @@ by hand
 \begin_inset Quotes xrd
 \end_inset
 
-, we use the numerical solver to calibrate for us.
- For example, to calibrate the model to produce certain consumption levels
- 
+,
+ we use the numerical solver to calibrate for us.
+ For example,
+ to calibrate the model to produce certain consumption levels 
 \begin_inset Formula $C_{j=1}=200,C_{j=2}=100$
 \end_inset
 
  we would usually insert these values into eq.
- (6), and this would exactly provide us with the parameters 
+ (6),
+ and this would exactly provide us with the parameters 
 \begin_inset Formula $\gamma_{j=1},\gamma_{j=2}$
 \end_inset
 
- that makes the model produce the desired, observed consumption levels.
+ that makes the model produce the desired,
+ observed consumption levels.
  A similar procedure in gamY is done by setting 
 \begin_inset Formula $C_{j=1}=200,C_{j=2}=100$
 \end_inset
@@ -4000,8 +4602,7 @@ Data and initialization
 
  and solving the corresponding model using GAMS (i.e.
  and endo-exo procedure).
- In practice this involves using the equation and variable blocks to produce
- a calibration model:
+ In practice this involves using the equation and variable blocks to produce a calibration model:
 \begin_inset Newline newline
 \end_inset
 
@@ -4064,12 +4665,13 @@ gamma[j]
 \begin_inset Newline newline
 \end_inset
 
-This procedure takes the existing group of endogenous variables, subtracts
- 
+This procedure takes the existing group of endogenous variables,
+ subtracts 
 \begin_inset Formula $C_{j}$
 \end_inset
 
- (making it exogenous when solving), and adds 
+ (making it exogenous when solving),
+ and adds 
 \begin_inset Formula $\gamma_{j}$
 \end_inset
 
@@ -4078,8 +4680,7 @@ This procedure takes the existing group of endogenous variables, subtracts
 status collapsed
 
 \begin_layout Plain Layout
-When during this kind of calibration you will often run into pivot-errors
- (
+When during this kind of calibration you will often run into pivot-errors (
 \begin_inset Quotes xld
 \end_inset
 
@@ -4088,11 +4689,10 @@ Pivot too small
 \end_inset
 
 ).
- A common source for this error is that all sides of an equation are entirely
- exogenized, thus rendering gams unable to solve the equation (even if it
- is satisfied by default).
- Example: Image a model equation stating that aggregate consumption equals
- the sum of components 
+ A common source for this error is that all sides of an equation are entirely exogenized,
+ thus rendering gams unable to solve the equation (even if it is satisfied by default).
+ Example:
+ Image a model equation stating that aggregate consumption equals the sum of components 
 \begin_inset Formula $C=\sum_{j}C_{j}$
 \end_inset
 
@@ -4107,8 +4707,7 @@ Pivot too small
 \end_inset
 
 .
- This is likely to generate a pivot error as both sides of the equation
- 
+ This is likely to generate a pivot error as both sides of the equation 
 \begin_inset Formula $C=\sum_{j}C_{j}$
 \end_inset
 
@@ -4123,22 +4722,20 @@ Pivot too small
 \end_inset
 
 ) so as to leave the equation solvable.
- Of course another model variable must then be endogenized to leave the
- model square.
+ Of course another model variable must then be endogenized to leave the model square.
  
 \end_layout
 
 \end_inset
 
- Note that it might also be necessary to add new equations in the calibration-mo
-del.
- For instance, it is standard to assume that the parameters 
+ Note that it might also be necessary to add new equations in the calibration-model.
+ For instance,
+ it is standard to assume that the parameters 
 \begin_inset Formula $\gamma_{j}$
 \end_inset
 
  sum to one (thus making them shares).
- To account for this when solving the model using GAMS we add the following
- equation:
+ To account for this when solving the model using GAMS we add the following equation:
 \begin_inset Newline newline
 \end_inset
 
@@ -4192,8 +4789,7 @@ $ENDBLOCK
 \begin_inset Newline newline
 \end_inset
 
-This new calibration-block is then combined with the existing block of equations
- by using the $MODEL command:
+This new calibration-block is then combined with the existing block of equations by using the $MODEL command:
 \begin_inset Newline newline
 \end_inset
 
@@ -4243,7 +4839,9 @@ calibration_block
 \end_layout
 
 \begin_layout LyX-Code
-$FIX All; $UNFIX group_calib_endo; 
+$FIX All;
+ $UNFIX group_calib_endo;
+ 
 \end_layout
 
 \begin_layout LyX-Code
@@ -4256,8 +4854,9 @@ solve Calib_model using CNS;
 \begin_inset Newline newline
 \end_inset
 
-The last two lines first fixes all variables, endogenizes the variables
- of the calibration model, and solves the calibration model.
+The last two lines first fixes all variables,
+ endogenizes the variables of the calibration model,
+ and solves the calibration model.
  
 \end_layout
 
@@ -4277,8 +4876,9 @@ resume
 Solving.
 
 \series default
- If the calibration was solved successfully, proceed and solve the actual
- model, composed of block of equations 
+ If the calibration was solved successfully,
+ proceed and solve the actual model,
+ composed of block of equations 
 \series bold
 mSector_model
 \series default
@@ -4287,8 +4887,7 @@ mSector_model
 group_endo
 \series default
 .
- Check that the results of solving the calibration model and the actual
- model are the same.
+ Check that the results of solving the calibration model and the actual model are the same.
  
 \end_layout
 
@@ -4336,8 +4935,8 @@ Change the elasticity of substitution of consumption from
 
 \begin_layout Enumerate
 Let the productivity of sector 2 decline by 10%.
- How much does the productivity in sector 1 need to increase to cause an
- increase in wages of 3%? 
+ How much does the productivity in sector 1 need to increase to cause an increase in wages of 3%?
+ 
 \end_layout
 
 \end_body
