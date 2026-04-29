@@ -668,7 +668,7 @@ class Precompiler:
       
       ({open_bracket}[^$]+?{close_bracket})?        #  Sets
       \s*
-      (\$.+?)?              #  Set restrictions
+      (\${open_bracket}[^;]+?{close_bracket})?              #  Set restrictions
       \s*
       \.\.
       (.+?)                 #  LHS
@@ -681,10 +681,14 @@ class Precompiler:
     self.blocks[model_name] = Block()
     replacement_text += f"\n$GROUP {group_name} ;\n"
     
-    for equation_match in equation_pattern.finditer(self.remove_comments(content)):
+    content = self.remove_comments(content)
+    last_match_end = 0
+    for equation_match in equation_pattern.finditer(content):
+      replacement_text += content[last_match_end:equation_match.start()]
       eq_name, suffix, sets, conditions, LHS, RHS = (
         group if group is not None else "" for group in equation_match.groups()
       )
+      last_match_end = equation_match.end()
 
       var, var_sets = self.find_associated_variable(eq_name, sets, LHS, RHS)
 
@@ -710,6 +714,7 @@ class Precompiler:
       replacement_text += f"EQUATION {eq.name}{eq.sets};"
       replacement_text += "\n"+f"{eq.name}{eq.sets}{eq.conditions}.. {eq.LHS} =E= {eq.RHS};"+"\n"
 
+    replacement_text += content[last_match_end:]
     replacement_text += f"$MODEL {model_name} {model_name};"
     return replacement_text
 

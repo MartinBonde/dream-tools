@@ -153,6 +153,21 @@ def test_block_can_add_automatic_adjustment_terms(tmp_path):
   assert re.search(r"\(\(q\[t\] \+ j_q\[t\]\) \* \(1\+jr_q\[t\]\)\)\s*=E=\s*demand\[t\];", output)
 
 
+def test_block_retains_code_that_is_not_an_equation(tmp_path):
+  text = """
+  $BLOCK B_market
+    E_q[t].. q[t] =E= demand[t];
+    abort$(card(t) = 0) "Missing time set";
+    E_p[t].. p[t] =E= 1;
+  $ENDBLOCK
+  """
+
+  output, precompiler = expand(tmp_path, text)
+
+  assert set(precompiler.blocks["B_market"]) == {"E_q", "E_p"}
+  assert 'abort$(card(t) = 0) "Missing time set";' in output
+
+
 def test_solve_macro_builds_temporary_model(tmp_path):
   text = """
   $BLOCK B_market
