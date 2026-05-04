@@ -69,8 +69,7 @@ class _DataFrame(pd.DataFrame):
     xline=None,
     vertical_legend=False,
     horizontal_yaxis_title=False,
-    small_figure=False,
-    figure_size=None,
+    figure_size="document_large",
     legend_label_width=48,
     colored_legend=True,
     alternating_dash=None,
@@ -90,8 +89,6 @@ class _DataFrame(pd.DataFrame):
     if xline is not None:
       fig = add_xline(fig, xline)
 
-    if figure_size is None:
-      figure_size = "document_small" if small_figure else "document_large"
     fig.update_layout(**dt.figure_layouts[figure_size])
 
     fig.update_layout(**layout)
@@ -111,7 +108,7 @@ class _DataFrame(pd.DataFrame):
     if colored_legend:
       fig = dt.colored_text_legend(fig)
     else:
-      fig = dt.reserve_legend_space(fig, columns=1)
+      fig = dt.reserve_legend_space(fig)
 
     return fig
 
@@ -169,7 +166,7 @@ def wrap_legend_labels(fig, width=48):
       ))
   return fig
 
-def reserve_legend_space(fig, columns=1):
+def reserve_legend_space(fig, columns=None):
   """
   Increase figure height and bottom margin so the chart area stays fixed when the legend grows.
   """
@@ -178,6 +175,7 @@ def reserve_legend_space(fig, columns=1):
     return fig
 
   font_size = fig.layout.legend.font.size or fig.layout.font.size or 10
+  columns = columns or legend_column_count(fig, traces, font_size)
   line_height = 1.25 * font_size
   row_gap = 0.6 * font_size
   legend_rows = [
@@ -197,6 +195,74 @@ def reserve_legend_space(fig, columns=1):
     margin_b=new_margin_b,
   )
 
+def legend_label_lines(trace):
+  return trace.name.split("<br>")
+
+def legend_label_width(trace, font_size):
+  return max(map(len, legend_label_lines(trace))) * font_size * 0.55
+
+def legend_width(fig):
+  margin = fig.layout.margin
+  return (fig.layout.width or 0) - (margin.l or 0) - (margin.r or 0)
+
+def legend_height(fig):
+  margin = fig.layout.margin
+  return (fig.layout.height or 0) - (margin.t or 0) - (margin.b or 0)
+
+def legend_column_count(fig, traces, font_size):
+  available_width = legend_width(fig)
+  if not available_width:
+    return 1
+
+  label_gap = 2 * font_size
+  for columns in range(len(traces), 1, -1):
+    rows = [traces[i:i + columns] for i in range(0, len(traces), columns)]
+    if all(
+      sum(legend_label_width(trace, font_size) for trace in row) + label_gap * (len(row) - 1) <= available_width
+      for row in rows
+    ):
+      return columns
+  return 1
+
+def trace_dash(trace):
+  return trace.line.dash or "solid"
+
+def legend_needs_line_samples(traces):
+  return any(trace_dash(trace) != "solid" for trace in traces)
+
+def legend_sample_shape(trace, x0, x1, y, color="black", line_width=2):
+  return dict(
+    type="line",
+    x0=x0,
+    x1=x1,
+    xref="paper",
+    y0=y,
+    y1=y,
+    yref="paper",
+    line=dict(
+      color=color,
+      dash=trace_dash(trace),
+      width=trace.line.width or line_width,
+    ),
+  )
+
+def legend_entry_layout(fig, trace, columns, row_offset, column_number, yshift, font_size):
+  plot_width = legend_width(fig)
+  plot_height = legend_height(fig)
+  if not plot_width or not plot_height:
+    return row_offset + (column_number + 0.5) / columns, "center", None
+
+  sample_width = min(2.4 * font_size / plot_width, 0.5 / columns)
+  label_gap = 0.5 * font_size / plot_width
+  label_width = legend_label_width(trace, font_size) / plot_width
+  entry_width = sample_width + label_gap + label_width
+  center = row_offset + (column_number + 0.5) / columns
+  x0 = center - entry_width / 2
+  x1 = x0 + sample_width
+  y = (yshift - font_size) / plot_height
+  shape = legend_sample_shape(trace, x0, x1, y)
+  return x1 + label_gap, "left", shape
+
 def trace_color(fig, trace, i):
   color = getattr(trace.line, "color", None) or getattr(trace.marker, "color", None)
   if color is not None:
@@ -204,7 +270,7 @@ def trace_color(fig, trace, i):
   colorway = fig.layout.colorway or fig.layout.template.layout.colorway or ()
   return colorway[i % len(colorway)] if colorway else "black"
 
-def colored_text_legend(fig):
+def colored_text_legend(fig, columns=None):
   """
   Replace the native legend with centered colored text labels below the chart.
   """
@@ -216,25 +282,38 @@ def colored_text_legend(fig):
   line_height = 1.25 * font_size
   row_gap = 0.6 * font_size
   axis_gap = 2.2 * font_size
+  columns = columns or legend_column_count(fig, traces, font_size)
+  legend_rows = [traces[i:i + columns] for i in range(0, len(traces), columns)]
   yshift = -(axis_gap + row_gap)
   annotations = list(fig.layout.annotations or [])
+  shapes = list(fig.layout.shapes or [])
+  show_line_samples = legend_needs_line_samples(traces)
 
-  for i, trace in enumerate(traces):
-    label_height = (trace.name.count("<br>") + 1) * line_height
-    annotations.append(dict(
-      x=0.5,
-      xref="paper",
-      xanchor="center",
-      y=0,
-      yref="paper",
-      yanchor="top",
-      yshift=yshift,
-      text=trace.name,
-      font=dict(size=font_size, color=trace_color(fig, trace, i)),
-      showarrow=False,
-    ))
-    yshift -= label_height + row_gap
-    trace.showlegend = False
+  for row_number, row in enumerate(legend_rows):
+    row_height = max(len(legend_label_lines(trace)) for trace in row) * line_height
+    row_offset = (columns - len(row)) / (2 * columns)
+    for column_number, trace in enumerate(row):
+      i = row_number * columns + column_number
+      x = row_offset + (column_number + 0.5) / columns
+      xanchor = "center"
+      if show_line_samples:
+        x, xanchor, shape = legend_entry_layout(fig, trace, columns, row_offset, column_number, yshift, font_size)
+        shape["line"]["color"] = trace_color(fig, trace, i)
+        shapes.append(shape)
+      annotations.append(dict(
+        x=x,
+        xref="paper",
+        xanchor=xanchor,
+        y=0,
+        yref="paper",
+        yanchor="top",
+        yshift=yshift,
+        text=trace.name,
+        font=dict(size=font_size, color=trace_color(fig, trace, i)),
+        showarrow=False,
+      ))
+      trace.showlegend = False
+    yshift -= row_height + row_gap
 
   margin = fig.layout.margin
   old_margin_b = margin.b or 0
@@ -243,6 +322,7 @@ def colored_text_legend(fig):
   return fig.update_layout(
     showlegend=False,
     annotations=annotations,
+    shapes=shapes,
     height=(fig.layout.height or 0) + new_margin_b - old_margin_b,
     margin_b=new_margin_b,
   )

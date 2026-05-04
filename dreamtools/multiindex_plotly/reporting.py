@@ -43,7 +43,11 @@ def prt(
     display(df)
 
 def write_image(fig, file_name, scale=3):
-  fig.write_image(file_name, scale=scale)
+  if file_name.endswith(".pdf"):
+    fig.write_image(file_name, scale=96 / DPI)
+  else:
+    fig.write_image(file_name, scale=scale)
+
   if file_name.endswith(".png"):
     from PIL import Image
     with Image.open(file_name) as img:
