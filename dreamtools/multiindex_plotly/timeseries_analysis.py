@@ -1,6 +1,7 @@
 import dreamtools as dt
 import numpy as np
 import pandas as pd
+import textwrap
 from inspect import signature
 from warnings import simplefilter
 
@@ -64,15 +65,21 @@ class _DataFrame(pd.DataFrame):
   def plot(
     self,
     operator=None,
-    layout={},
+    layout=None,
     xline=None,
-    vertical_legend=True,
-    horizontal_yaxis_title=True,
+    vertical_legend=False,
+    horizontal_yaxis_title=False,
     small_figure=False,
+    figure_size=None,
+    legend_label_width=48,
+    colored_legend=True,
     alternating_dash=None,
     **kwargs
   ):
     """Plot DataFrame using plotly."""
+    if layout is None:
+      layout = {}
+
     fig = pd.DataFrame.plot(self, **kwargs)()
 
     fig.update_layout(**self.layout)
@@ -83,10 +90,9 @@ class _DataFrame(pd.DataFrame):
     if xline is not None:
       fig = add_xline(fig, xline)
 
-    if small_figure:
-      fig.update_layout(**dt.small_figure_layout)
-    else:
-      fig.update_layout(**dt.large_figure_layout)
+    if figure_size is None:
+      figure_size = "document_small" if small_figure else "document_large"
+    fig.update_layout(**dt.figure_layouts[figure_size])
 
     fig.update_layout(**layout)
 
@@ -98,6 +104,14 @@ class _DataFrame(pd.DataFrame):
 
     if alternating_dash is not None:
       fig = dt.alternating_dash(fig, dash=alternating_dash, line_width=3)
+
+    if legend_label_width:
+      fig = dt.wrap_legend_labels(fig, width=legend_label_width)
+
+    if colored_legend:
+      fig = dt.colored_text_legend(fig)
+    else:
+      fig = dt.reserve_legend_space(fig, columns=1)
 
     return fig
 
@@ -140,6 +154,98 @@ def vertical_legend(fig, col_count=2):
   for i, trace in enumerate(fig.data):
     trace.legendgroup = i // (trace_count / col_count)
   return fig
+
+def wrap_legend_labels(fig, width=48):
+  """
+  Wrap long legend labels so horizontal legends do not overlap.
+  """
+  for trace in fig.data:
+    if trace.name:
+      trace.name = "<br>".join(textwrap.wrap(
+        trace.name,
+        width=width,
+        break_long_words=False,
+        break_on_hyphens=False,
+      ))
+  return fig
+
+def reserve_legend_space(fig, columns=1):
+  """
+  Increase figure height and bottom margin so the chart area stays fixed when the legend grows.
+  """
+  traces = [trace for trace in fig.data if trace.showlegend is not False and trace.name]
+  if not traces:
+    return fig
+
+  font_size = fig.layout.legend.font.size or fig.layout.font.size or 10
+  line_height = 1.25 * font_size
+  row_gap = 0.6 * font_size
+  legend_rows = [
+    traces[i:i + columns]
+    for i in range(0, len(traces), columns)
+  ]
+  legend_height = sum(
+    max(trace.name.count("<br>") + 1 for trace in row) * line_height + row_gap
+    for row in legend_rows
+  )
+
+  margin = fig.layout.margin
+  old_margin_b = margin.b or 0
+  new_margin_b = old_margin_b + legend_height
+  return fig.update_layout(
+    height=(fig.layout.height or 0) + new_margin_b - old_margin_b,
+    margin_b=new_margin_b,
+  )
+
+def trace_color(fig, trace, i):
+  color = getattr(trace.line, "color", None) or getattr(trace.marker, "color", None)
+  if color is not None:
+    return color
+  colorway = fig.layout.colorway or fig.layout.template.layout.colorway or ()
+  return colorway[i % len(colorway)] if colorway else "black"
+
+def colored_text_legend(fig):
+  """
+  Replace the native legend with centered colored text labels below the chart.
+  """
+  traces = [trace for trace in fig.data if trace.showlegend is not False and trace.name]
+  if not traces:
+    return fig
+
+  font_size = fig.layout.legend.font.size or fig.layout.font.size or 10
+  line_height = 1.25 * font_size
+  row_gap = 0.6 * font_size
+  axis_gap = 2.2 * font_size
+  yshift = -(axis_gap + row_gap)
+  annotations = list(fig.layout.annotations or [])
+
+  for i, trace in enumerate(traces):
+    label_height = (trace.name.count("<br>") + 1) * line_height
+    annotations.append(dict(
+      x=0.5,
+      xref="paper",
+      xanchor="center",
+      y=0,
+      yref="paper",
+      yanchor="top",
+      yshift=yshift,
+      text=trace.name,
+      font=dict(size=font_size, color=trace_color(fig, trace, i)),
+      showarrow=False,
+    ))
+    yshift -= label_height + row_gap
+    trace.showlegend = False
+
+  margin = fig.layout.margin
+  old_margin_b = margin.b or 0
+  legend_height = -yshift
+  new_margin_b = old_margin_b + legend_height
+  return fig.update_layout(
+    showlegend=False,
+    annotations=annotations,
+    height=(fig.layout.height or 0) + new_margin_b - old_margin_b,
+    margin_b=new_margin_b,
+  )
 
 def add_xline(fig, x):
   "Add a vertical line to a plotly figure at x"
@@ -206,8 +312,8 @@ def DataFrame(
 
   # Set default layout for plotly which depends on the operator
   df.layout = {
-    "yaxis_title_text": dt.YAXIS_TITLE_FROM_OPERATOR.get(operator, ""),
-    "xaxis_title_text": dt.TIME_AXIS_TITLE,
+    "yaxis_title_text": dt.yaxis_title_from_operator(operator),
+    "xaxis_title_text": dt.time_axis_title(),
     "legend_title_text": "",
   }
 

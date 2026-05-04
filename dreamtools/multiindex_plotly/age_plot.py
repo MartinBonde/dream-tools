@@ -28,8 +28,8 @@ def age_figure_3d(series,
     surface,
     layout={
       "scene": {
-        "xaxis": {"title": dt.TIME_AXIS_TITLE, "autorange": "reversed"},
-        "yaxis": {"title": dt.AGE_AXIS_TITLE, "autorange": "reversed"},
+        "xaxis": {"title": dt.time_axis_title(), "autorange": "reversed"},
+        "yaxis": {"title": dt.age_axis_title(), "autorange": "reversed"},
         "zaxis": {"title": ztitle},
       },
       "title": {"text": title, 'x': 0.5, "y": 0.925}
@@ -76,8 +76,8 @@ def age_figure_2d(iter_series,
       for col in series_df:
         df[f"{series.name}[{col}]"] = series_df[col]
   return df.plot().update_layout(**{
-    "xaxis_title_text": dt.AGE_AXIS_TITLE,
-    "yaxis_title_text": dt.YAXIS_TITLE_FROM_OPERATOR.get(operator, ""),
+    "xaxis_title_text": dt.age_axis_title(),
+    "yaxis_title_text": dt.yaxis_title_from_operator(operator),
     "legend_title": "",
     **kwargs
   })
