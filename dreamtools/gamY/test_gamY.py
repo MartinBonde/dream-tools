@@ -115,6 +115,114 @@ def test_group_subset_syntax_is_equivalent_to_dollar_condition(tmp_path):
   assert_contains_line(output, "subset_x[t]$(tx[t]) = x.L[t];")
 
 
+def test_macro_variables_set_eval_and_scope(tmp_path):
+  text = """
+  $SETGLOBAL terminal_year 2060
+  $SETLOCAL scenario baseline
+  $EVAL next_year 2059 + 1
+  scalar t /%terminal_year%/;
+  set s /%scenario%/;
+  scalar n /%next_year%/;
+  """
+
+  output, precompiler = expand(tmp_path, text)
+
+  assert "scalar t /2060/;" in output
+  assert "set s /baseline/;" in output
+  assert "scalar n /2060/;" in output
+  assert precompiler.globals["terminal_year"] == "2060"
+  assert precompiler.locals["scenario"] == "baseline"
+  assert precompiler.locals["next_year"] == "2060"
+
+
+def test_import_file_is_parsed_with_existing_state(tmp_path):
+  imported = tmp_path / "imported.gms"
+  imported.write_text("""
+  $GROUP G_imported
+    q[t] "Imported quantity";
+  """, encoding="utf-8")
+  text = """
+  $Import imported.gms
+  $LOOP G_imported:
+    imported_{name}{sets} = {name}.L{sets};
+  $ENDLOOP
+  """
+
+  output, precompiler = expand(tmp_path, text)
+
+  assert "Import file:" in output
+  assert "Variable q[t] \"Imported quantity\" //;" in output
+  assert_contains_line(output, "imported_q[t] = q.L[t];")
+  assert "q" in precompiler.groups["G_imported"]
+
+
+def test_if_statement_supports_gams_style_comparisons(tmp_path):
+  text = """
+  $SET scenario baseline
+  $IF "%scenario%" EQ "baseline":
+    scalar active /1/;
+  $ENDIF
+  $IF 1 NE 1:
+    scalar inactive /1/;
+  $ENDIF
+  """
+
+  output, _ = expand(tmp_path, text)
+
+  assert "scalar active /1/;" in output
+  assert "scalar inactive /1/;" not in output
+  assert "# If condition evaluated to false" in output
+
+
+def test_for_loop_supports_single_and_tuple_iterators(tmp_path):
+  text = """
+  $FOR i in range(2):
+    scalar n_i /i/;
+  $ENDFOR
+  $FOR {name}, {value} in [("a", 1), ("b", 2)]:
+    scalar {name} /{value}/;
+  $ENDFOR
+  """
+
+  output, _ = expand(tmp_path, text)
+
+  assert_contains_line(output, "scalar n_0 /0/;")
+  assert_contains_line(output, "scalar n_1 /1/;")
+  assert_contains_line(output, "scalar a /1/;")
+  assert_contains_line(output, "scalar b /2/;")
+
+
+def test_user_defined_function_replaces_arguments(tmp_path):
+  text = """
+  $FUNCTION init(name, sets):
+    name.Lsets = 1;
+  $ENDFUNCTION
+  @init(q, [t])
+  """
+
+  output, precompiler = expand(tmp_path, text)
+
+  assert "Define function: init" in output
+  assert "q.L[t] = 1;" in output
+  assert "init" in precompiler.user_functions
+
+
+def test_replace_and_regex_macros_support_counts_and_groups(tmp_path):
+  text = """
+  $REPLACE("foo", "bar", 1)
+    foo foo
+  $ENDREPLACE
+  $REGEX("(x)([0-9])", "\\g<1>_\\g<2>")
+    x1 x2
+  $ENDREGEX
+  """
+
+  output, _ = expand(tmp_path, text)
+
+  assert "bar foo" in output
+  assert "x_1 x_2" in output
+
+
 def test_block_can_map_equations_to_endogenous_group_and_add_dummy_condition(tmp_path):
   gamy.automatic_dummy_suffix = "_dummy"
   text = """
@@ -168,6 +276,60 @@ def test_block_retains_code_that_is_not_an_equation(tmp_path):
   assert 'abort$(card(t) = 0) "Missing time set";' in output
 
 
+def test_model_define_combines_and_removes_equations(tmp_path):
+  text = """
+  $BLOCK B_core
+    E_q[t].. q[t] =E= demand[t];
+    E_p[t].. p[t] =E= 1;
+  $ENDBLOCK
+  $MODEL M_subset
+    B_core
+    -E_p
+  ;
+  """
+
+  output, precompiler = expand(tmp_path, text)
+
+  assert "MODEL M_subset /" in output
+  assert "E_q" in precompiler.blocks["M_subset"]
+  assert "E_p" not in precompiler.blocks["M_subset"]
+  assert re.search(r"MODEL M_subset / \s*E_q\s*/;", output)
+
+
+def test_loop_over_equations_exposes_name_sets_conditions_lhs_and_rhs(tmp_path):
+  text = """
+  $BLOCK B_market
+    E_q[t]$(tx0[t]).. q[t] =E= demand[t];
+  $ENDBLOCK
+  $LOOP B_market:
+    copy_{name}{sets}${conditions}.. {LHS} =E= {RHS};
+  $ENDLOOP
+  """
+
+  output, precompiler = expand(tmp_path, text)
+
+  assert "copy_E_q[t]$[((tx0[t]))]..  q[t]  =E=  demand[t];" in output
+  assert precompiler.blocks["B_market"]["E_q"].conditions == "$((tx0[t]))"
+
+
+def test_fix_and_unfix_expand_groups_with_conditions_and_bounds(tmp_path):
+  text = """
+  $GROUP G_endo
+    q[t]$(tx0[t]) "Quantity";
+
+  $FIX G_endo;
+  $FIX(0) q[t];
+  $UNFIX(0, inf) G_endo;
+  """
+
+  output, _ = expand(tmp_path, text)
+
+  assert "q.FX[t]$((tx0[t])) = q.L[t];" in output
+  assert "q.FX[t] = 0;" in output
+  assert "q.lo[t]$((tx0[t])) = 0;" in output
+  assert "q.up[t]$((tx0[t])) = inf;" in output
+
+
 def test_solve_macro_builds_temporary_model(tmp_path):
   text = """
   $BLOCK B_market
@@ -201,6 +363,39 @@ def test_eval_python_and_exec_python_macros(tmp_path):
 
   assert "set s /base/;" in output
   assert "scalar n /5/;" in output
+
+
+def test_save_and_read_preserve_precompiler_metadata(tmp_path):
+  first_path = tmp_path / "first.gms"
+  first_path.write_text("""
+  $GROUP G_endo
+    q[t] "Quantity";
+  """, encoding="utf-8")
+  first = gamy.Precompiler(first_path)
+  first()
+  first.save("checkpoint")
+
+  second_path = tmp_path / "second.gms"
+  second_path.write_text("""
+  $LOOP G_endo:
+    restored_{name}{sets} = {name}.L{sets};
+  $ENDLOOP
+  """, encoding="utf-8")
+  second = gamy.Precompiler(second_path)
+  second.read("checkpoint")
+  output = second()
+
+  assert_contains_line(output, "restored_q[t] = q.L[t];")
+  assert "q" in second.groups["G_endo"]
+
+
+def test_find_gams_reports_missing_executable(monkeypatch):
+  monkeypatch.setattr(gamy.shutil, "which", lambda name: None)
+  monkeypatch.delenv("GAMS", raising=False)
+  monkeypatch.delenv("gams", raising=False)
+
+  with pytest.raises(SystemExit, match="could not find GAMS"):
+    gamy.find_gams()
 
 
 @pytest.mark.parametrize(
