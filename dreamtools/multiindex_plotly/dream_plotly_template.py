@@ -69,12 +69,11 @@ def figure_layout(
 
 figure_layouts = {
   "slide_large": figure_layout(
-    24.0, 13.5, font_size=16, title_font_size=18, tick_font_size=14,
-    margin_l_cm=2.0, margin_r_cm=1.2, margin_t_cm=1.2, margin_b_cm=1.2,
+    15.5, 10.0, font_size=16, title_font_size=18, tick_font_size=14,
   ),
   "slide_small": figure_layout(
-    11.5, 8.0, font_size=13, title_font_size=15, tick_font_size=12,
-    margin_l_cm=1.6, margin_r_cm=0.8, margin_t_cm=1.0, margin_b_cm=1.0,
+    7.6, 7.0, font_size=13, title_font_size=15, tick_font_size=12,
+    margin_l_cm=1.2, margin_r_cm=0.7, margin_t_cm=0.8, margin_b_cm=0.8,
   ),
   "document_large": figure_layout(
     15.5, 10.0, font_size=10, title_font_size=10, tick_font_size=9,
