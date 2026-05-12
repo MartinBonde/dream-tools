@@ -9,3 +9,23 @@
 
 *.gdx
 !test.gdx
+
+# Python build and cache artifacts
+__pycache__/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# Editor and local workspace settings
+.vscode/
+.idea/
+*.code-workspace
+
+# Generated plots, reports, and local scratch outputs
+Output/
+*.png
+*.svg
+*.pdf
+*.html
+*.xlsm
