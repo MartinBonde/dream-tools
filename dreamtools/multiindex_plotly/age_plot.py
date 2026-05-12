@@ -1,6 +1,10 @@
 import plotly.graph_objects as go
 import dreamtools as dt
 import pandas as pd
+from pandas import IndexSlice
+
+from .dream_plotly_template import FONT_FAMILY
+from .timeseries_analysis import _DataFrame
 
 def age_figure_3d(series,
                   start_year=None,
@@ -27,6 +31,8 @@ def age_figure_3d(series,
   return go.Figure(
     surface,
     layout={
+      "template": "dream",
+      "font": dict(family=FONT_FAMILY),
       "scene": {
         "xaxis": {"title": dt.time_axis_title(), "autorange": "reversed"},
         "yaxis": {"title": dt.age_axis_title(), "autorange": "reversed"},
@@ -46,6 +52,14 @@ def age_figure_2d(iter_series,
                   reference_database=None,
                   names=None,
                   function=dummy_function,
+                  layout=None,
+                  xline=None,
+                  vertical_legend=False,
+                  horizontal_yaxis_title=False,
+                  figure_size="document_large",
+                  legend_label_width="auto",
+                  colored_legend=True,
+                  alternating_dash=None,
                   **kwargs
                   ):
   if isinstance(iter_series, pd.Series):
@@ -58,7 +72,7 @@ def age_figure_2d(iter_series,
     start_age = dt.START_AGE
   if end_age is None:
     end_age = dt.END_AGE
-  iter_series = [function(series.sort_index().loc[range(start_age,end_age+1), years]) for series in iter_series]
+  iter_series = [function(series.sort_index().loc[IndexSlice[start_age:end_age, years]]) for series in iter_series]
   if operator:
     if reference_database is None:
       reference_database = dt.get_reference_database()
@@ -75,9 +89,21 @@ def age_figure_2d(iter_series,
     else:
       for col in series_df:
         df[f"{series.name}[{col}]"] = series_df[col]
-  return df.plot().update_layout(**{
+  df = _DataFrame(df)
+  df.layout = {
     "xaxis_title_text": dt.age_axis_title(),
     "yaxis_title_text": dt.yaxis_title_from_operator(operator),
-    "legend_title": "",
-    **kwargs
-  })
+    "legend_title_text": "",
+  }
+  merged_layout = {**(layout or {}), **kwargs}
+  return df.plot(
+    operator=operator,
+    layout=merged_layout,
+    xline=xline,
+    vertical_legend=vertical_legend,
+    horizontal_yaxis_title=horizontal_yaxis_title,
+    figure_size=figure_size,
+    legend_label_width=legend_label_width,
+    colored_legend=colored_legend,
+    alternating_dash=alternating_dash,
+  )
