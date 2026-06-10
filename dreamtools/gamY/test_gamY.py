@@ -223,6 +223,19 @@ def test_replace_and_regex_macros_support_counts_and_groups(tmp_path):
   assert "x_1 x_2" in output
 
 
+def test_block_equation_dollar_condition_without_parentheses(tmp_path):
+  text = """
+  $BLOCK B_market
+    E_q[t]$tx0[t].. q[t] =E= demand[t];
+  $ENDBLOCK
+  """
+
+  output, precompiler = expand(tmp_path, text)
+
+  assert "E_q[t]$(tx0[t]).." in output
+  assert precompiler.blocks["B_market"]["E_q"].conditions == "$(tx0[t])"
+
+
 def test_block_can_map_equations_to_endogenous_group_and_add_dummy_condition(tmp_path):
   gamy.automatic_dummy_suffix = "_dummy"
   text = """

@@ -668,7 +668,7 @@ class Precompiler:
       
       ({open_bracket}[^$]+?{close_bracket})?        #  Sets
       \s*
-      (\${open_bracket}[^;]+?{close_bracket})?              #  Set restrictions
+      (\$(?:{open_bracket}[^;]+?{close_bracket}|{ident}(?:{open_bracket}[^$]+?{close_bracket})?))?       #  Set restrictions
       \s*
       \.\.
       (.+?)                 #  LHS
