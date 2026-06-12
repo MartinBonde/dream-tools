@@ -668,7 +668,7 @@ class Precompiler:
       
       ({open_bracket}[^$]+?{close_bracket})?        #  Sets
       \s*
-      (\$.+?)?              #  Set restrictions
+      (\$(?:{open_bracket}[^;]+?{close_bracket}|{ident}(?:{open_bracket}[^$]+?{close_bracket})?))?       #  Set restrictions
       \s*
       \.\.
       (.+?)                 #  LHS
@@ -681,10 +681,14 @@ class Precompiler:
     self.blocks[model_name] = Block()
     replacement_text += f"\n$GROUP {group_name} ;\n"
     
-    for equation_match in equation_pattern.finditer(self.remove_comments(content)):
+    content = self.remove_comments(content)
+    last_match_end = 0
+    for equation_match in equation_pattern.finditer(content):
+      replacement_text += content[last_match_end:equation_match.start()]
       eq_name, suffix, sets, conditions, LHS, RHS = (
         group if group is not None else "" for group in equation_match.groups()
       )
+      last_match_end = equation_match.end()
 
       var, var_sets = self.find_associated_variable(eq_name, sets, LHS, RHS)
 
@@ -710,6 +714,7 @@ class Precompiler:
       replacement_text += f"EQUATION {eq.name}{eq.sets};"
       replacement_text += "\n"+f"{eq.name}{eq.sets}{eq.conditions}.. {eq.LHS} =E= {eq.RHS};"+"\n"
 
+    replacement_text += content[last_match_end:]
     replacement_text += f"$MODEL {model_name} {model_name};"
     return replacement_text
 
@@ -1192,13 +1197,13 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
     for eq in equations:
       # All equations must have a subset enclosed in parentheses to allow adding to the subset using and/or.
       # A subset of (1) is added if none exists
-      if eq.conditions == "":
-        eq.conditions = "(1)"
-      if eq.conditions[0] == "$":
-        eq.conditions = eq.conditions[1:]
-      if eq.conditions[0] != "[":
-        eq.conditions = "[" + eq.conditions + "]"
-      eq.conditions = eq.conditions
+      conditions = eq.conditions
+      if conditions == "":
+        conditions = "(1)"
+      if conditions[0] == "$":
+        conditions = conditions[1:]
+      if conditions[0] != "[":
+        conditions = "[" + conditions + "]"
 
       sub = expression
 
@@ -1246,8 +1251,9 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
         else:
           sub = iter_patterns["sets"].sub(eq.sets, sub, count=1)
 
+      values = {**eq.__dict__, "conditions": conditions}
       for key, pattern in iter_patterns.items():
-        sub = pattern.sub(eq.__dict__[key], sub)
+        sub = pattern.sub(values[key], sub)
       replacement_text += sub
     return replacement_text
 
@@ -1336,9 +1342,9 @@ Error in {group_name}: {name}{sets}{item_conditions}""")
     bounds = match.group(2)
     content = self.remove_comments(match.group(3))
     if command == "$fix" and bounds:
-      level_value = bounds
+      level_value = bounds.strip()
     if command == "$unfix" and bounds:
-      lower_bound, upper_bound = bounds.split(",")
+      lower_bound, upper_bound = [bound.strip() for bound in bounds.split(",", 1)]
 
     replacement_text = f"\n# ----- gamY: {self.comment_out(match.group(0))} -----\n$offlisting\n"
 
@@ -1426,7 +1432,7 @@ def find_gams():
     """
     gams_path = shutil.which("GAMS") or shutil.which("gams") or os.environ.get("GAMS") or os.environ.get("gams")
     
-    if not os.path.isfile(gams_path):
+    if not gams_path or not os.path.isfile(gams_path):
       sys.exit("ERROR: gamY could not find GAMS. Set path to gams executable as environmental variable with variable name GAMS (or gams)")
     
     return gams_path

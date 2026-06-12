@@ -1,6 +1,7 @@
 import dreamtools as dt
 import numpy as np
 import pandas as pd
+import textwrap
 from inspect import signature
 from warnings import simplefilter
 
@@ -64,15 +65,22 @@ class _DataFrame(pd.DataFrame):
   def plot(
     self,
     operator=None,
-    layout={},
+    layout=None,
     xline=None,
-    vertical_legend=True,
-    horizontal_yaxis_title=True,
-    small_figure=False,
+    vertical_legend=False,
+    horizontal_yaxis_title=False,
+    figure_size="document_large",
+    legend_label_width="auto",
+    colored_legend=True,
     alternating_dash=None,
+    showlegend=None,
     **kwargs
   ):
     """Plot DataFrame using plotly."""
+    layout = dict(layout or {})
+    if showlegend is not None:
+      layout["showlegend"] = showlegend
+
     fig = pd.DataFrame.plot(self, **kwargs)()
 
     fig.update_layout(**self.layout)
@@ -83,12 +91,19 @@ class _DataFrame(pd.DataFrame):
     if xline is not None:
       fig = add_xline(fig, xline)
 
-    if small_figure:
-      fig.update_layout(**dt.small_figure_layout)
-    else:
-      fig.update_layout(**dt.large_figure_layout)
+    fig.update_layout(**dt.figure_layouts[figure_size])
+    axis_title_font_sizes = {
+      "xaxis": fig.layout.xaxis.title.font.size,
+      "yaxis": fig.layout.yaxis.title.font.size,
+    }
 
     fig.update_layout(**layout)
+    if axis_title_font_sizes["xaxis"] is not None and fig.layout.xaxis.title.font.size is None:
+      fig.update_layout(xaxis_title_font_size=axis_title_font_sizes["xaxis"])
+    if axis_title_font_sizes["yaxis"] is not None and fig.layout.yaxis.title.font.size is None:
+      fig.update_layout(yaxis_title_font_size=axis_title_font_sizes["yaxis"])
+    if fig.layout.showlegend is None:
+      fig.update_layout(showlegend=True)
 
     if horizontal_yaxis_title:
       fig = dt.horizontal_yaxis_title(fig)
@@ -98,6 +113,17 @@ class _DataFrame(pd.DataFrame):
 
     if alternating_dash is not None:
       fig = dt.alternating_dash(fig, dash=alternating_dash, line_width=3)
+
+    if fig.layout.showlegend and legend_label_width:
+      fig = dt.wrap_legend_labels(fig, width=legend_label_width)
+
+    fig = compact_xaxis_title(fig)
+
+    if fig.layout.showlegend:
+      if colored_legend:
+        fig = dt.colored_text_legend(fig)
+      else:
+        fig = dt.reserve_legend_space(fig)
 
     return fig
 
@@ -140,6 +166,231 @@ def vertical_legend(fig, col_count=2):
   for i, trace in enumerate(fig.data):
     trace.legendgroup = i // (trace_count / col_count)
   return fig
+
+def wrap_legend_labels(fig, width="auto"):
+  """
+  Wrap long legend labels so horizontal legends do not overlap.
+  """
+  if width == "auto":
+    font_size = fig.layout.legend.font.size or fig.layout.font.size or 10
+    width = legend_label_character_count(fig, font_size)
+
+  for trace in fig.data:
+    if trace.name:
+      trace.name = "<br>".join(textwrap.wrap(
+        trace.name,
+        width=width,
+        break_long_words=False,
+        break_on_hyphens=False,
+      ))
+  return fig
+
+def reserve_legend_space(fig, columns=None):
+  """
+  Increase figure height and bottom margin so the chart area stays fixed when the legend grows.
+  """
+  traces = [trace for trace in fig.data if trace.showlegend is not False and trace.name]
+  if not traces:
+    return fig
+
+  font_size = fig.layout.legend.font.size or fig.layout.font.size or 10
+  columns = columns or legend_column_count(fig, traces, font_size)
+  line_height = 1.25 * font_size
+  row_gap = 0.6 * font_size
+  legend_rows = [
+    traces[i:i + columns]
+    for i in range(0, len(traces), columns)
+  ]
+  legend_height = sum(
+    max(trace.name.count("<br>") + 1 for trace in row) * line_height + row_gap
+    for row in legend_rows
+  )
+
+  margin = fig.layout.margin
+  old_margin_b = margin.b or 0
+  new_margin_b = old_margin_b + legend_height + _extra_gap_below_xaxis(fig)
+  return fig.update_layout(
+    height=(fig.layout.height or 0) + new_margin_b - old_margin_b,
+    margin_b=new_margin_b,
+  )
+
+def legend_label_lines(trace):
+  return trace.name.split("<br>")
+
+def legend_label_width(trace, font_size):
+  return max(map(len, legend_label_lines(trace))) * font_size * 0.55
+
+def legend_entry_width_px(fig, trace, columns, font_size, needs_line_samples):
+  """Horizontal space for one legend entry; matches legend_entry_layout (inset + segment + gap + label)."""
+  w = legend_label_width(trace, font_size)
+  if not needs_line_samples:
+    return w
+  pw = legend_width(fig)
+  gap_px = 0.5 * font_size
+  if not pw:
+    return w + 2.4 * font_size + 2 * gap_px
+  segment_px = min(2.4 * font_size, pw * (0.5 / columns))
+  return w + gap_px + segment_px + gap_px
+
+def legend_label_character_count(fig, font_size):
+  traces = [trace for trace in fig.data if trace.showlegend is not False and trace.name]
+  available_width = legend_width(fig)
+  if not available_width:
+    return 48
+  sample_width = 2.9 * font_size if legend_needs_line_samples(traces) else 0
+  return max(1, int((available_width - sample_width) / (font_size * 0.55)))
+
+def _extra_gap_below_xaxis(fig):
+  """Extra vertical gap (px) between x-axis tick labels and the colored legend; covers x-axis title."""
+  title = fig.layout.xaxis.title
+  text = title.text if title else None
+  if not text or not str(text).strip():
+    return 0
+  fs = (title.font.size if title.font else None) or fig.layout.font.size or 10
+  return 1.35 * fs
+
+def compact_xaxis_title(fig, standoff_px=4):
+  """Pull x-axis title closer to tick labels (Plotly default ~15px); frees space above the colored legend."""
+  title = fig.layout.xaxis.title
+  if not title or not title.text or not str(title.text).strip():
+    return fig
+  return fig.update_layout(xaxis=dict(title=dict(standoff=standoff_px)))
+
+def legend_width(fig):
+  margin = fig.layout.margin
+  return (fig.layout.width or 0) - (margin.l or 0) - (margin.r or 0)
+
+def legend_height(fig):
+  margin = fig.layout.margin
+  return (fig.layout.height or 0) - (margin.t or 0) - (margin.b or 0)
+
+def legend_column_count(fig, traces, font_size):
+  """Max columns such that each entry fits its column band (width / columns); not sum(widths) on one row."""
+  available_width = legend_width(fig)
+  if not available_width:
+    return 1
+
+  needs_line_samples = legend_needs_line_samples(traces)
+  for columns in range(len(traces), 1, -1):
+    col_w = available_width / columns
+    if all(
+      legend_entry_width_px(fig, trace, columns, font_size, needs_line_samples) <= col_w
+      for trace in traces
+    ):
+      return columns
+  return 1
+
+def trace_dash(trace):
+  return trace.line.dash or "solid"
+
+def legend_needs_line_samples(traces):
+  return any(trace_dash(trace) != "solid" for trace in traces)
+
+def legend_sample_shape(trace, x0, x1, y, color="black", line_width=2):
+  return dict(
+    type="line",
+    x0=x0,
+    x1=x1,
+    xref="paper",
+    y0=y,
+    y1=y,
+    yref="paper",
+    line=dict(
+      color=color,
+      dash=trace_dash(trace),
+      width=trace.line.width or line_width,
+    ),
+  )
+
+def legend_entry_layout(fig, trace, columns, column_number, yshift, font_size):
+  plot_width = legend_width(fig)
+  plot_height = legend_height(fig)
+  if not plot_width or not plot_height:
+    return (column_number + 0.5) / columns, "center", None
+
+  sample_width = min(2.4 * font_size / plot_width, 0.5 / columns)
+  label_gap = 0.5 * font_size / plot_width
+  col_left = column_number / columns
+  inset = label_gap
+  x0 = col_left + inset
+  x1 = x0 + sample_width
+  y = (yshift - font_size) / plot_height
+  shape = legend_sample_shape(trace, x0, x1, y)
+  return x1 + label_gap, "left", shape
+
+def legend_label_anchor_in_column(fig, columns, column_number, font_size):
+  """Left-align labels within each column when columns > 1; single column stays centered."""
+  if columns <= 1:
+    return (column_number + 0.5) / columns, "center"
+  plot_width = legend_width(fig)
+  if not plot_width:
+    return (column_number + 0.5) / columns, "center"
+  inset = 0.5 * font_size / plot_width
+  return column_number / columns + inset, "left"
+
+def trace_color(fig, trace, i):
+  color = getattr(trace.line, "color", None) or getattr(trace.marker, "color", None)
+  if color is not None:
+    return color
+  colorway = fig.layout.colorway or fig.layout.template.layout.colorway or ()
+  return colorway[i % len(colorway)] if colorway else "black"
+
+def colored_text_legend(fig, columns=None):
+  """
+  Replace the native legend with colored text labels below the chart (single column centered; multiple columns left-aligned per column).
+  """
+  traces = [trace for trace in fig.data if trace.showlegend is not False and trace.name]
+  if not traces:
+    return fig
+
+  font_size = fig.layout.legend.font.size or fig.layout.font.size or 10
+  line_height = 1.25 * font_size
+  row_gap = 0.6 * font_size
+  axis_gap = 2.2 * font_size + _extra_gap_below_xaxis(fig)
+  columns = columns or legend_column_count(fig, traces, font_size)
+  legend_rows = [traces[i:i + columns] for i in range(0, len(traces), columns)]
+  yshift = -(axis_gap + row_gap)
+  annotations = list(fig.layout.annotations or [])
+  shapes = list(fig.layout.shapes or [])
+  show_line_samples = legend_needs_line_samples(traces)
+
+  for row_number, row in enumerate(legend_rows):
+    row_height = max(len(legend_label_lines(trace)) for trace in row) * line_height
+    for column_number, trace in enumerate(row):
+      i = row_number * columns + column_number
+      shape = None
+      if show_line_samples:
+        x, xanchor, shape = legend_entry_layout(fig, trace, columns, column_number, yshift, font_size)
+        shape["line"]["color"] = trace_color(fig, trace, i)
+        shapes.append(shape)
+      else:
+        x, xanchor = legend_label_anchor_in_column(fig, columns, column_number, font_size)
+      annotations.append(dict(
+        x=x,
+        xref="paper",
+        xanchor=xanchor,
+        y=0,
+        yref="paper",
+        yanchor="top",
+        yshift=yshift,
+        text=trace.name,
+        font=dict(size=font_size, color=trace_color(fig, trace, i)),
+        showarrow=False,
+      ))
+      trace.showlegend = False
+    yshift -= row_height + row_gap
+
+  margin = fig.layout.margin
+  old_margin_b = margin.b or 0
+  legend_height = -yshift
+  new_margin_b = old_margin_b + legend_height
+  return fig.update_layout(
+    showlegend=False,
+    annotations=annotations,
+    shapes=shapes,
+    height=(fig.layout.height or 0) + new_margin_b - old_margin_b,
+    margin_b=new_margin_b,
+  )
 
 def add_xline(fig, x):
   "Add a vertical line to a plotly figure at x"
@@ -206,8 +457,8 @@ def DataFrame(
 
   # Set default layout for plotly which depends on the operator
   df.layout = {
-    "yaxis_title_text": dt.YAXIS_TITLE_FROM_OPERATOR.get(operator, ""),
-    "xaxis_title_text": dt.TIME_AXIS_TITLE,
+    "yaxis_title_text": dt.yaxis_title_from_operator(operator),
+    "xaxis_title_text": dt.time_axis_title(),
     "legend_title_text": "",
   }
 

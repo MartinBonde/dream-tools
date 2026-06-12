@@ -1,6 +1,7 @@
 from math import ceil
 from time import sleep
 import inspect
+import xml.etree.ElementTree as ET
 
 from plotly import offline as pyo
 from plotly.subplots import make_subplots
@@ -8,6 +9,7 @@ from plotly.subplots import make_subplots
 import pandas as pd
 
 import dreamtools as dt
+from .dream_plotly_template import DPI
 
 def plot(
     data,
@@ -41,12 +43,25 @@ def prt(
     display(df)
 
 def write_image(fig, file_name, scale=3):
-  fig.write_image(file_name, scale=scale)
+  if file_name.endswith(".pdf"):
+    fig.write_image(file_name, scale=96 / DPI)
+  else:
+    fig.write_image(file_name, scale=scale)
+
   if file_name.endswith(".png"):
     from PIL import Image
     with Image.open(file_name) as img:
       sleep(0.01)
-      img.save(file_name, dpi=(96 * scale, 96 * scale))
+      img.save(file_name, dpi=(DPI * scale, DPI * scale))
+  elif file_name.endswith(".svg"):
+    set_svg_size_in_cm(file_name, fig)
+
+def set_svg_size_in_cm(file_name, fig):
+  tree = ET.parse(file_name)
+  root = tree.getroot()
+  root.set("width", f"{fig.layout.width / DPI * 2.54:.3f}cm")
+  root.set("height", f"{fig.layout.height / DPI * 2.54:.3f}cm")
+  tree.write(file_name, encoding="unicode", xml_declaration=False)
 
 def figures_to_html(figs, filename="figures.html", encoding="utf-8"):
   """Write an iter of plotly figures to an html file."""

@@ -1,32 +1,37 @@
 DEFAULT_SET_AGGREGATIONS = {
-	"a_": ["tot",],
-	"a": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
 
 	"c_": ['cTot',],
-	"c" : ['cBil', 'cEne', 'cVar', 'cBol', 'cTje', 'cTur'],
+	"c" : ['cHouEne','cHou','cCarEne','cCar','cFoodDairy','cFoodVeg','cFoodBev','cFoodPig','cFoodCow','cFoodFish','cFoodPoul','cNonFood','cSer','cTou'],
+	
+  "Ani_sectors_":['tot'],
+  "Ani_sectors":['01031','01032','01051','01052','01061','01062','01070'],
+	
+  "Plant_sectors_":['tot'],
+	"Plant_sectors":['01011','01012','01020'],
+	
+  "land5":['wetland','settlement','forest','sea','crop','grass'],
+	
+  "liabilities":['Mortgages','Debt'],
 
 	"x_": ['xTot',],
-	"x" : ['xEne', 'xVar', 'xSoe', 'xTje', 'xTur'],
+	"x" : ['xOth', 'xTur'],
 
 	"g_": ['gTot',],
 	"g" : ['g',],
 
-	"s_": ['tot',],
-	"sp": ['tje', 'fre', 'byg', 'soe', 'bol', 'lan', 'ene', 'udv'],
-	"s" : ['tje', 'fre', 'byg', 'soe', 'bol', 'lan', 'ene', 'udv', 'off'],
-	"r_": ['tot',],
-	"r" : ['tje', 'fre', 'byg', 'soe', 'bol', 'lan', 'ene', 'udv', 'off'],
-
-	"d_": ['tot',],
-
 	"i_": ['iTot',],
-	"i" : ['IM', 'IB', 'IL'],
+	"i" : ['iM', 'iB', 'iT','invt'],
 
-	"k_": ['IM', 'IB'],
-	"k" : ['IM', 'IB'],
+	"k_": ['iTot'],
+	"k" : ['iM', 'iB','iT'],
+	
+  "n_":['tot'],
+	"n":['byg','Dag','Dep','Elek','Farlig','Glas','Have','Jord','Metal','Org','Papir','PVC','Plast','Rest','Slam','Trae','Tekst'],
+	
+  "pens_":['Pension'],
+	"Pens":['PensX','Kap','Alder'],
 
-    "portf_": ['NetFin',],
-	"portf": ['NetFin', ],
+	"portfolio": ['NetFinAssets','Debt','Mortgages','Gold','Deposits','Pension','ForeignEquity','Equity','Bonds'],
 }
 
 LANGUAGE_LABELS = {

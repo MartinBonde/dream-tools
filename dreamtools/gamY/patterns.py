@@ -35,7 +35,7 @@ PATTERN_STRINGS = {
                 \s+
                 ({ident})
                 \s+
-                ([^\;]+)
+                ([^\r\n\;]+)
             """,
 
     "import": r"""

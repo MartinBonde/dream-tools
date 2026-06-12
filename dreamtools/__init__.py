@@ -1,6 +1,6 @@
 from .gams_pandas import *
 
-__version__ = "4.1.4"
+__version__ = "4.2.1"
 
 # Global setting controlling the default name of the time index
 X_AXIS_NAME = "t"
@@ -18,11 +18,8 @@ END_AGE = 100
 # Global databases
 REFERENCE_DATABASE = None
 
-# Ploting
+# Plotting
 from .multiindex_plotly import *
-
-# Model specific settings
-from .multiindex_plotly.makro_settings import DEFAULT_SET_AGGREGATIONS, AGE_AXIS_TITLE, TIME_AXIS_TITLE, YAXIS_TITLE_FROM_OPERATOR
 
 from .utils import *
 

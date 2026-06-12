@@ -9,5 +9,6 @@ from .dream_plotly_template import create_dream_template
 pio.templates["dream"] = create_dream_template(trace_count=6, items_per_row=2)
 pio.templates.default = "dream"
 
-from .dream_plotly_template import dream_colors_rgb, small_figure_layout, large_figure_layout
+from .dream_plotly_template import dream_colors_rgb, figure_layouts
+from .makro_settings import DEFAULT_SET_AGGREGATIONS, LANGUAGE, age_axis_title, time_axis_title, yaxis_title_from_operator, set_language
 

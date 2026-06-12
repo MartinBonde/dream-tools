@@ -1,5 +1,4 @@
 import plotly.graph_objects as go
-import math
 
 dream_colors_rgb = {
   "DREAM": "rgb(245,82,82)",
@@ -27,99 +26,117 @@ dream_colors_hex = [
   "E6E6E8", # Light gray
 ]
 
-DPI = 96
+DPI = 72
 DPCM = DPI / 2.54
+FONT_FAMILY = "Hind, Arial, sans-serif"
 
-large_figure_layout = dict(
-  width = 15.5 * DPCM,
-  # height = (plot_height + 3.8) * DPCM,
-  margin_l = 1.5 * DPCM,
-  margin_r = 0.5 * DPCM,
-  margin_t = 1 * DPCM,
-  # margin_b = 3.8 * DPCM,
-)
+def cm(x):
+  return x * DPCM
 
-small_figure_layout = dict(
-  width = 7.6 * DPCM,
-  # height = (plot_height + 5) * DPCM,
-  margin_l = 1.5 * DPCM,
-  margin_r = 0.5 * DPCM,
-  margin_t = 1 * DPCM,
-  # margin_b = 5 * DPCM,
-)
+def figure_layout(
+  width_cm,
+  height_cm,
+  font_size,
+  title_font_size,
+  tick_font_size,
+  margin_l_cm=1.5,
+  margin_r_cm=1.0,
+  margin_t_cm=1.0,
+  margin_b_cm=1.0,
+):
+  return dict(
+    width=cm(width_cm),
+    height=cm(height_cm),
+    margin_l=cm(margin_l_cm),
+    margin_r=cm(margin_r_cm),
+    margin_t=cm(margin_t_cm),
+    margin_b=cm(margin_b_cm),
+    title_font_size=title_font_size,
+    font=dict(size=font_size, family=FONT_FAMILY),
+    legend=dict(
+      title_text="",
+      orientation="v",
+      yref="container",
+      y=0,
+      yanchor="bottom",
+      x=0.5,
+      xanchor="center",
+      font=dict(size=font_size),
+    ),
+    xaxis=dict(title_font=dict(size=font_size), tickfont=dict(size=tick_font_size)),
+    yaxis=dict(title_font=dict(size=font_size), tickfont=dict(size=tick_font_size)),
+  )
 
-def calculate_legend_height(trace_count, legend_item_height_cm=0.5, items_per_row=2):
-  """
-  Calculate the legend height based on the number of legend items,
-  assuming a fixed number of items per row.
-  
-  :param trace_count: Number of traces (legend items) in the plot.
-  :param legend_item_height_cm: Height per legend item in cm.
-  :param items_per_row: Number of legend items per row.
-  :return: Height of the legend in cm.
-  """
-  rows = math.ceil(trace_count / items_per_row)
-  return rows * legend_item_height_cm
-
-def calculate_figure_height(trace_count, base_height_cm=5, legend_item_height_cm=0.5, items_per_row=2):
-  """
-  Calculate the figure height based on the number of legend items.
-  
-  :param trace_count: Number of traces (legend items) in the plot.
-  :param base_height_cm: Base height of the plot in cm.
-  :param legend_item_height_cm: Height per legend item in cm.
-  :param items_per_row: Number of legend items per row.
-  :return: Total height of the figure in cm.
-  """
-  legend_height_cm = calculate_legend_height(trace_count, legend_item_height_cm, items_per_row)
-  total_height_cm = base_height_cm + legend_height_cm
-  return total_height_cm * DPCM
+figure_layouts = {
+  "slide_large": figure_layout(
+    15.5, 10.0, font_size=16, title_font_size=18, tick_font_size=14,
+  ),
+  "slide_small": figure_layout(
+    7.6, 7.0, font_size=13, title_font_size=15, tick_font_size=12,
+    margin_l_cm=1.2, margin_r_cm=0.7, margin_t_cm=0.8, margin_b_cm=0.8,
+  ),
+  "document_large": figure_layout(
+    15.5, 10.0, font_size=10, title_font_size=10, tick_font_size=9,
+  ),
+  "document_small": figure_layout(
+    7.6, 7.0, font_size=8, title_font_size=9, tick_font_size=8,
+    margin_l_cm=1.2, margin_r_cm=0.7, margin_t_cm=0.8, margin_b_cm=0.8,
+  ),
+}
 
 def create_dream_template(trace_count, items_per_row=2):
   """
-  Create a Plotly template with dynamic height based on the number of traces.
+  Create a Plotly template with DREAM colors and ordinary Plotly layout behavior.
   
-  :param trace_count: Number of traces (legend items) in the plot.
-  :param items_per_row: Number of legend items per row.
+  The trace_count and items_per_row arguments are kept for backwards compatibility.
   :return: Plotly template.
   """
-  figure_height = calculate_figure_height(trace_count, items_per_row=items_per_row)
-  legend_height_cm = calculate_legend_height(trace_count, items_per_row=items_per_row)
-  
   dream_layout = dict(
     colorway=list(dream_colors_rgb.values()),
     title_font_size=10,
-    legend_orientation="h",
-    legend_yanchor="top",
-    legend_y=-legend_height_cm / DPCM,  # Position the legend below the plot
-    legend_x=0.5,
-    legend_xanchor="center",
-    font=dict(size=10, family="Hind"),
+    legend=dict(
+      title_text="",
+      orientation="v",
+      yref="container",
+      y=0,
+      yanchor="bottom",
+      x=0.5,
+      xanchor="center",
+    ),
+    font=dict(size=10, family=FONT_FAMILY),
     margin=dict(
       l=1.5 * DPCM,
-      r=0.5 * DPCM,
+      r=1.0 * DPCM,
       t=1 * DPCM,
-      b=(legend_height_cm + 1) * DPCM  # Adjust bottom margin to accommodate the legend
+      b=1 * DPCM,
     ),
     width=15.5 * DPCM,
-    height=figure_height,
+    height=10 * DPCM,
+    plot_bgcolor="white",
+    paper_bgcolor="white",
     xaxis=dict(
       title_font=dict(size=10),
       tickfont=dict(size=9),
       showgrid=True,
+      gridcolor=dream_colors_rgb["Light gray"],
       ticks="outside",
+      ticklen=4,
       showline=True,
       mirror=True,
       zeroline=False,
+      automargin=True,
     ),
     yaxis=dict(
       title_font=dict(size=10),
       tickfont=dict(size=9),
       showgrid=True,
+      gridcolor=dream_colors_rgb["Light gray"],
       ticks="outside",
+      ticklen=4,
       showline=True,
       mirror=True,
       zeroline=False,
+      automargin=True,
     ),
   )
 
@@ -137,21 +154,3 @@ def create_dream_template(trace_count, items_per_row=2):
   )
   
   return dream_template
-
-# # Example usage
-# trace_count = 10  # Number of traces (legend items)
-# fig = go.Figure()
-
-# # Add some sample traces
-# for i in range(trace_count):
-#   fig.add_trace(go.Scatter(
-#     x=[1, 2, 3],
-#     y=[i, i + 1, i + 2],
-#     mode='lines+markers',
-#     name=f'Trace {i}'
-#   ))
-
-# # Apply the custom template
-# fig.update_layout(template=create_dream_template(trace_count))
-
-# fig.show()
